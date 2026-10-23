@@ -70,7 +70,7 @@
     spawnMinDistance = 45           # минимальная дистанция спавна
     spawnMaxDistance = 75           # максимальная дистанция спавна
     spawnOnlyAtNight = false        # спавнить только ночью
-    huntRange = 96                  # радиус обнаружения игрока
+    huntRange = 56                  # радиус обнаружения игрока
     oneHitKill = true               # убивать с одного удара
     redScreen = true                # красный экран и тряска камеры
     casinoEnabled = true            # казино после смерти от Меллстроя
@@ -85,7 +85,7 @@ $env:JAVA_HOME = "путь\к\jdk-17"
 .\gradlew.bat build
 ```
 
-Готовый jar: `build/libs/mellstroy-1.0.0.jar` → кинуть в `.minecraft/mods`
+Готовый jar: `build/libs/mellstroy-0.1.jar` → кинуть в `.minecraft/mods`
 (нужен Forge 47.x для 1.20.1).
 
 ## Ресурсы
