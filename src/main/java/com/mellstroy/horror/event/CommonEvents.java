@@ -18,6 +18,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
@@ -62,7 +63,13 @@ public final class CommonEvents {
         float yaw = player.getYRot() * (float) (Math.PI / 180.0D);
         double x = player.getX() - Math.sin(yaw) * 4.0D;
         double z = player.getZ() + Math.cos(yaw) * 4.0D;
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) Math.floor(x), (int) Math.floor(z));
+        int xFloor = (int) Math.floor(x);
+        int zFloor = (int) Math.floor(z);
+        BlockPos spawnPos = findSpawnPos(level, xFloor, zFloor, player.getBlockY());
+        if (spawnPos == null) {
+            source.sendFailure(Component.translatable("message.mellstroy.no_space"));
+            return 0;
+        }
 
         MellstroyEntity mob = ModEntities.MELLSTROY.get().create(level);
         if (mob == null) {
@@ -70,8 +77,9 @@ public final class CommonEvents {
             return 0;
         }
 
-        mob.moveTo(x, y, z, player.getYRot() + 180.0F, 0.0F);
-        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(BlockPos.containing(x, y, z)),
+        mob.moveTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D,
+                player.getYRot() + 180.0F, 0.0F);
+        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos),
                 MobSpawnType.COMMAND, null, null);
         level.addFreshEntity(mob);
         MellstroyRespawnManager.cancel();
@@ -172,7 +180,19 @@ public final class CommonEvents {
         }
 
         // Never more than one of him per player, and only when he is far away.
-        if (!level.getEntitiesOfClass(MellstroyEntity.class, player.getBoundingBox().inflate(200.0D)).isEmpty()) {
+        // In the Nether, an old copy spawned on top of the bedrock roof can
+        // never reach the player and would block all future spawns, so it is
+        // discarded here.
+        boolean alreadyNear = false;
+        for (MellstroyEntity existing : level.getEntitiesOfClass(MellstroyEntity.class,
+                player.getBoundingBox().inflate(200.0D))) {
+            if (level.dimension() == Level.NETHER && existing.getY() > 126.0D) {
+                existing.discard();
+                continue;
+            }
+            alreadyNear = true;
+        }
+        if (alreadyNear) {
             return;
         }
 
@@ -207,11 +227,18 @@ public final class CommonEvents {
                 continue;
             }
 
-            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-            BlockPos pos = new BlockPos(x, y, z);
+            BlockPos pos = findSpawnPos(level, x, z, player.getBlockY());
+            if (pos == null) {
+                continue;
+            }
+            if (player.distanceToSqr(pos.getX() + 0.5D, player.getY(), pos.getZ() + 0.5D)
+                    < (double) min * min) {
+                // The neighbouring-column fallback must not spawn him too close.
+                continue;
+            }
             BlockPos below = pos.below();
 
-            if (y <= level.getMinBuildHeight() + 2) {
+            if (pos.getY() <= level.getMinBuildHeight() + 2) {
                 continue;
             }
 
@@ -231,7 +258,8 @@ public final class CommonEvents {
                 return false;
             }
 
-            mob.moveTo(x + 0.5D, y, z + 0.5D, level.random.nextFloat() * 360.0F, 0.0F);
+            mob.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D,
+                    level.random.nextFloat() * 360.0F, 0.0F);
             mob.finalizeSpawn(level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null, null);
             level.addFreshEntity(mob);
 
@@ -241,6 +269,76 @@ public final class CommonEvents {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Finds a safe spawn position. In the Overworld the usual heightmap works,
+     * but in the Nether it points at the bedrock roof and the player would
+     * never meet him. There we scan around the player's own Y for a floor and,
+     * if that exact column is a lava sea or a wall, around the neighbouring
+     * columns as well.
+     */
+    private static BlockPos findSpawnPos(ServerLevel level, int x, int z, int referenceY) {
+        if (level.dimension() == Level.OVERWORLD) {
+            return new BlockPos(x,
+                    level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+        }
+
+        BlockPos direct = scanSpawnColumn(level, x, z, referenceY);
+        if (direct != null) {
+            return direct;
+        }
+
+        for (int radius = 1; radius <= 4; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                        continue;
+                    }
+                    BlockPos found = scanSpawnColumn(level, x + dx, z + dz, referenceY);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+            }
+        }
+        // Nothing safe nearby; let the caller reject the spawn.
+        return null;
+    }
+
+    private static BlockPos scanSpawnColumn(ServerLevel level, int x, int z, int referenceY) {
+        for (int radius = 0; radius <= 48; radius++) {
+            BlockPos down = new BlockPos(x, referenceY - radius, z);
+            if (isSafeSpawn(level, down)) {
+                return down;
+            }
+            if (radius > 0) {
+                BlockPos up = new BlockPos(x, referenceY + radius, z);
+                if (isSafeSpawn(level, up)) {
+                    return up;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean isSafeSpawn(ServerLevel level, BlockPos pos) {
+        if (pos.getY() <= level.getMinBuildHeight() + 2
+                || pos.getY() >= level.getMaxBuildHeight() - 2) {
+            return false;
+        }
+        // The Nether roof is at y = 127. Spawning there was the original bug:
+        // the heightmap returned the roof and he stood above the world where
+        // no player can ever reach him.
+        if (level.dimension() == Level.NETHER && pos.getY() >= 126) {
+            return false;
+        }
+        BlockPos below = pos.below();
+        BlockState ground = level.getBlockState(below);
+        return ground.isSolidRender(level, below)
+                && level.getBlockState(pos).isAir()
+                && level.getBlockState(pos.above()).isAir()
+                && level.getFluidState(pos).isEmpty();
     }
 
     /* ------------------------------------------------------------------ */

@@ -29,6 +29,8 @@ public final class ModSounds {
     /** Slot reels spinning. The animation is stretched to the full length of this sound. */
     public static final RegistryObject<SoundEvent> PROKRUTKA = register("mellstroy.prokrutka");
     public static final RegistryObject<SoundEvent> ARTUR = registerWorld("mellstroy.artur");
+    /** Played when a one-minute chase turns into an all-out rush. */
+    public static final RegistryObject<SoundEvent> SEKS = registerWorld("mellstroy.seks");
 
     /** Random phrases he shouts while chasing you. */
     public static final List<RegistryObject<SoundEvent>> PHRASES = List.of(

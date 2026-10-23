@@ -39,6 +39,7 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FlowingFluid;
@@ -78,10 +79,18 @@ public class MellstroyEntity extends Monster {
 
     /** Ticks the player has to stay hidden before he loses them. */
     private static final int HIDE_TICKS = 40;
+    /** A hidden player may be glimpsed through cover for this long without wasting the hide. */
+    private static final int HIDE_VISIBLE_GRACE = 6;
     /** How long he searches after losing a player. */
     private static final int HIDE_COOLDOWN_TICKS = 30 * 20;
     /** How long he keeps walking towards the last known position. */
     private static final int SEARCH_TICKS = 10 * 20;
+    /**
+     * If the player gets this far away and stays out of sight for a few
+     * seconds, he has genuinely escaped instead of just stepping behind a tree.
+     */
+    private static final double ESCAPE_DISTANCE = 64.0D;
+    private static final int ESCAPE_TICKS = 4 * 20;
     /** "Ne dognal" is played this long after he loses you. */
     private static final int LOST_SOUND_DELAY = 7 * 20;
     /** After a casino win he ignores the player for a while. */
@@ -96,7 +105,11 @@ public class MellstroyEntity extends Monster {
 
     private int lostTicks;
     private int hideCooldown;
+    private int hideVisibleTicks;
+    private int escapeTicks;
     private int searchTicks;
+    @Nullable
+    private Vec3 hideAnchor;
     private int graceTicks;
     private int nextPhraseTick = 60;
     private int lostSoundTick = -1;
@@ -130,11 +143,26 @@ public class MellstroyEntity extends Monster {
      * seconds.
      */
     private static final double RUSH_STEP = 1.0D;
+    /**
+     * A real player needs four ticks per block when pillaring up. He never
+     * builds faster than that, so the climb looks like actual building.
+     */
+    private static final int PILLAR_TICKS = 4;
+    /**
+     * A staircase step (one block down + one block across) takes two ticks,
+     * so he descends at ten blocks per second instead of materialising on top
+     * of the player in a single tick.
+     */
+    private static final int STAIR_TICKS = 2;
     /** How long he has been chasing the current target without reaching them. */
     private int chaseTicks;
     private boolean desperate;
     @Nullable
     private UUID chaseTargetId;
+    /** Ticks left before the next gold block of a pillar may be placed. */
+    private int pillarCooldown;
+    /** Ticks left before the next staircase step may be taken. */
+    private int stairCooldown;
     /** Cooldown between random walks while there is nobody to hunt. */
     private int idleStrollCooldown;
 
@@ -202,6 +230,21 @@ public class MellstroyEntity extends Monster {
     /* ------------------------------------------------------------------ */
     /*  AI                                                                 */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Safety net: a NaN position (for example from a division by zero in the
+     * rush) makes chunk and entity lookups loop forever and freezes the whole
+     * server. Such an entity is dropped instead of poisoning every tick.
+     */
+    @Override
+    public void tick() {
+        if (!Double.isFinite(this.getX()) || !Double.isFinite(this.getY())
+                || !Double.isFinite(this.getZ())) {
+            this.discard();
+            return;
+        }
+        super.tick();
+    }
 
     @Override
     protected void customServerAiStep() {
@@ -280,18 +323,57 @@ public class MellstroyEntity extends Monster {
         }
 
         if (target != null) {
-            this.lastKnownPos = target.position();
-            if (this.houseRushTicks <= 0 && isHidden(target)) {
+            // Hiding works in every chase, including the house rush: sneak,
+            // break line of sight and stand still for two seconds.
+            boolean hiddenNow = isHidden(target);
+
+            if (hiddenNow) {
+                // While you are hidden he must NOT keep following your real
+                // position, otherwise he simply runs around the tree and sees
+                // you. He keeps the place where he saw you last instead.
                 this.lostTicks++;
+                this.hideVisibleTicks = 0;
                 if (this.lostTicks >= HIDE_TICKS) {
                     loseTarget(target);
                     target = null;
                 }
             } else {
-                this.lostTicks = 0;
+                // He can still track you normally while you run - even behind
+                // a tree - so breaking line of sight alone is not enough.
+                this.lastKnownPos = target.position();
+
+                if (this.lostTicks > 0 && target.isShiftKeyDown()
+                        && this.getSensing().hasLineOfSight(target)) {
+                    // He circled the tree and caught a glimpse. A few visible
+                    // ticks must not throw away a successful hide.
+                    if (++this.hideVisibleTicks >= HIDE_VISIBLE_GRACE) {
+                        this.lostTicks = 0;
+                        this.hideVisibleTicks = 0;
+                    }
+                } else {
+                    this.lostTicks = 0;
+                    this.hideVisibleTicks = 0;
+                }
+            }
+
+            // Merely stepping behind a tree is not an escape: the player has
+            // to actually get far away and stay out of sight for a while.
+            if (target != null && this.houseRushTicks <= 0) {
+                if (this.distanceToSqr(target) > ESCAPE_DISTANCE * ESCAPE_DISTANCE
+                        && !this.getSensing().hasLineOfSight(target)) {
+                    if (++this.escapeTicks >= ESCAPE_TICKS) {
+                        loseTarget(target);
+                        target = null;
+                    }
+                } else {
+                    this.escapeTicks = 0;
+                }
             }
         } else {
             this.pathStuckTicks = 0;
+            this.lostTicks = 0;
+            this.hideVisibleTicks = 0;
+            this.escapeTicks = 0;
             if (this.houseRushTicks <= 0) {
                 this.desperate = false;
                 this.chaseTicks = 0;
@@ -309,7 +391,24 @@ public class MellstroyEntity extends Monster {
         if (hunting && target != null) {
             this.applyFear(target);
             this.tickChaseTimer(target);
-            if (this.isRushing()) {
+            if (this.lostTicks > 0 && target.isShiftKeyDown()) {
+                // You are hiding: stop chasing and scan the last known spot.
+                // Without this pause a rushing Mellstroy covers the whole
+                // hiding place before the two seconds are over.
+                this.getNavigation().stop();
+                this.getMoveControl().setWantedPosition(this.getX(), this.getY(), this.getZ(), 0.0D);
+                this.setDeltaMovement(Vec3.ZERO);
+                this.setSpeed(0.0F);
+                this.setXxa(0.0F);
+                this.setYya(0.0F);
+                this.setZza(0.0F);
+                this.setOnGround(true);
+                if (this.lastKnownPos != null) {
+                    this.getLookControl().setLookAt(
+                            this.lastKnownPos.x, this.lastKnownPos.y + 1.5D, this.lastKnownPos.z,
+                            30.0F, 30.0F);
+                }
+            } else if (this.isRushing()) {
                 // Only kill normal pathfinding while he is still far away;
                 // within three blocks the melee goal must be allowed to hit.
                 if (this.distanceToSqr(target) > 9.0D) {
@@ -539,7 +638,11 @@ public class MellstroyEntity extends Monster {
      * whole minute.
      */
     private boolean isRushing() {
-        return this.houseRushTicks > 0 || this.desperate;
+        // In the Nether he always moves like a cheater: the local terrain is
+        // lava, cliffs and fortress walls, and normal pathfinding cannot
+        // follow a player there.
+        return this.houseRushTicks > 0 || this.desperate
+                || this.level().dimension() == Level.NETHER;
     }
 
     /**
@@ -561,16 +664,21 @@ public class MellstroyEntity extends Monster {
         }
 
         this.chaseTicks++;
-        if (this.chaseTicks >= DESPERATE_TICKS) {
+        if (this.chaseTicks >= DESPERATE_TICKS && !this.desperate) {
             this.desperate = true;
+            // A full minute without catching the player: the chase turns into
+            // an all-out rush and the special sound kicks in.
+            if (target instanceof ServerPlayer serverPlayer) {
+                ModNetwork.sendPlayerSound(serverPlayer, ModSounds.SEKS.get(), 1.0F, 1.0F);
+            }
         }
     }
 
     /**
      * Covers up to twenty blocks per second straight towards the player.
      * Everything in the way is destroyed without a pause, gaps are bridged
-     * with gold, and when the player is above him he pillars up one gold block
-     * per tick - exactly the fastest a player could ever place blocks.
+     * with gold, and when the player is above him he pillars up at a real
+     * player's pace (one block every four ticks).
      */
     private void rushTowards(Player target) {
         if (!(this.level() instanceof ServerLevel level)) {
@@ -590,19 +698,30 @@ public class MellstroyEntity extends Monster {
             return;
         }
 
-        // Player above / below and roughly in the same column: straight up or
-        // straight down, building or digging as he goes. If that is blocked
-        // (bedrock, a barrier, somebody else's protected gold) he falls
-        // through to the horizontal carve below instead of freezing.
+        // Player above / below: build up or build a staircase down. When the
+        // player is below, the staircase starts immediately even from far
+        // away - he must never fly horizontally above the player and only
+        // then drop down. If the step is blocked (bedrock, a barrier,
+        // somebody else's protected gold) the horizontal move below is used.
         boolean vertical = false;
         if (dy > 0.9D && horizontal <= 4.0D) {
             vertical = this.rushPillarUp(level);
-        } else if (dy < -1.0D && horizontal <= 4.0D) {
-            vertical = this.rushDigDown(level);
+        } else if (dy < -1.0D) {
+            vertical = this.rushStairDown(level, target);
         } else if (horizontal < 0.05D) {
-            vertical = dy > 0.0D ? this.rushPillarUp(level) : this.rushDigDown(level);
+            vertical = dy > 0.0D ? this.rushPillarUp(level) : this.rushStairDown(level, target);
         }
         if (vertical) {
+            return;
+        }
+
+        // Directly above/below him and the staircase/pillar could not be built
+        // (world floor, bedrock, protected block). Dividing by a horizontal
+        // distance of zero used to produce NaN coordinates, which froze the
+        // whole server. Never move in that case.
+        if (horizontal < 0.05D) {
+            this.setDeltaMovement(Vec3.ZERO);
+            this.setOnGround(true);
             return;
         }
 
@@ -611,14 +730,21 @@ public class MellstroyEntity extends Monster {
         double nextZ = this.getZ() + dz / horizontal * step;
 
         BlockPos nextFeet = BlockPos.containing(nextX, this.getY() + 0.05D, nextZ);
-        // Demolish everything he is about to occupy. No path, no detour.
-        this.carveRushArea(level, nextFeet, 1, 2);
+        // Clear only the one-by-two space he will actually occupy. A whole
+        // 3x3x3 cube per tick (and the fluid updates it triggered next to
+        // Nether lava) was enough to stall the server.
+        this.carveRushBody(level, nextFeet);
+        if (!this.canOccupy(level, nextFeet)) {
+            // Bedrock or a barrier: do not put him inside it.
+            this.setDeltaMovement(Vec3.ZERO);
+            this.setOnGround(true);
+            return;
+        }
 
-        // One gold block per tick closes a gap under his feet. That is
-        // exactly as fast as the fastest possible player.
+        // Blocks appear only when they are actually needed: one gold block
+        // per tick over a gap, lava or water.
         BlockPos support = nextFeet.below();
-        if (!level.getBlockState(support).isSolidRender(level, support)
-                && level.getFluidState(support).isEmpty()) {
+        if (!level.getBlockState(support).isSolidRender(level, support)) {
             this.placeGoldRaw(level, support);
         }
 
@@ -629,19 +755,31 @@ public class MellstroyEntity extends Monster {
     }
 
     /**
-     * Pillars up towards a player above him, one gold block per tick - the
-     * same rate as the fastest possible player. Returns false when the column
-     * cannot be cleared, so the caller can go around instead.
+     * Pillars up towards a player above him. He places exactly one gold block
+     * every {@link #PILLAR_TICKS} ticks - the same rate as a real player - so
+     * the climb looks like building instead of teleporting. Returns false when
+     * the column cannot be cleared, so the caller can go around instead.
      */
     private boolean rushPillarUp(ServerLevel level) {
-        BlockPos feet = this.blockPosition();
+        // +0.1 avoids picking the floor block when he stands exactly on a
+        // block boundary; otherwise the gold placement used to fail and he
+        // simply killed the player from below.
+        BlockPos feet = BlockPos.containing(this.getX(), this.getY() + 0.1D, this.getZ());
         if (feet.getY() >= level.getMaxBuildHeight() - 3) {
             return false;
         }
 
-        // Clear the whole column he is about to stand in (three wide, three
-        // high) so an overhang cannot stop the climb.
-        this.carveRushArea(level, feet, 1, 2);
+        // Clear the whole column he is about to stand in (one wide, three
+        // high) so an overhang cannot stop the climb. Only on the tick a
+        // block is actually placed, not during the three waiting ticks.
+        if (this.pillarCooldown > 0) {
+            this.pillarCooldown--;
+            this.setDeltaMovement(Vec3.ZERO);
+            this.setOnGround(true);
+            return true;
+        }
+
+        this.carveRushArea(level, feet, 0, 2);
 
         if (!this.placeGoldRaw(level, feet)) {
             return false;
@@ -651,27 +789,74 @@ public class MellstroyEntity extends Monster {
         this.setDeltaMovement(Vec3.ZERO);
         this.fallDistance = 0.0F;
         this.setOnGround(true);
+        this.pillarCooldown = PILLAR_TICKS - 1;
         return true;
     }
 
-    /** Digs straight down towards a player below him. */
-    private boolean rushDigDown(ServerLevel level) {
-        BlockPos feet = this.blockPosition();
-        BlockPos below = feet.below();
-        if (below.getY() <= level.getMinBuildHeight()) {
+    /**
+     * Builds a cheater staircase down towards a player below him: one block
+     * down and one block towards the target every {@link #STAIR_TICKS} ticks,
+     * with a gold step placed only when there is nothing to stand on.
+     */
+    private boolean rushStairDown(ServerLevel level, Player target) {
+        BlockPos feet = BlockPos.containing(this.getX(), this.getY() + 0.1D, this.getZ());
+        if (feet.getY() <= level.getMinBuildHeight() + 1) {
             return false;
         }
 
-        this.mineRushBlock(level, below);
-        if (!level.getBlockState(below).getCollisionShape(level, below).isEmpty()) {
-            // Unbreakable floor (bedrock, barrier, protected gold).
+        // The step is not taken every tick: a short pause makes the descent
+        // readable and stops him from flying into the player.
+        if (this.stairCooldown > 0) {
+            this.stairCooldown--;
+            this.setDeltaMovement(Vec3.ZERO);
+            this.setOnGround(true);
+            return true;
+        }
+
+        double dx = target.getX() - this.getX();
+        double dz = target.getZ() - this.getZ();
+
+        int stepX = 0;
+        int stepZ = 0;
+        if (Math.abs(dx) >= Math.abs(dz) && Math.abs(dx) >= 0.3D) {
+            stepX = dx > 0.0D ? 1 : -1;
+        } else if (Math.abs(dz) >= 0.3D) {
+            stepZ = dz > 0.0D ? 1 : -1;
+        } else {
+            // The player is (almost) straight below: build a tight zigzag
+            // staircase instead of dropping down a one-block shaft.
+            if (((this.tickCount / 2) & 1) == 0) {
+                stepX = 1;
+            } else {
+                stepZ = 1;
+            }
+        }
+
+        BlockPos next = feet.offset(stepX, -1, stepZ);
+        if (next.getY() <= level.getMinBuildHeight()) {
             return false;
         }
 
-        this.setPos(this.getX(), feet.getY() - 1.0D, this.getZ());
+        // Only the one-by-one space of the next step is cleared. The ground
+        // below survives, so the descent looks like a real staircase; gold is
+        // added only where the step would otherwise float over air or lava.
+        this.carveRushArea(level, next, 0, 1);
+        if (!level.getBlockState(next).getCollisionShape(level, next).isEmpty()
+                || !level.getBlockState(next.above()).getCollisionShape(level, next.above()).isEmpty()) {
+            // Bedrock or a barrier: do not bury him in it.
+            return false;
+        }
+
+        BlockPos support = next.below();
+        if (!level.getBlockState(support).isSolidRender(level, support)) {
+            this.placeGoldRaw(level, support);
+        }
+
+        this.setPos(next.getX() + 0.5D, next.getY(), next.getZ() + 0.5D);
         this.setDeltaMovement(Vec3.ZERO);
         this.fallDistance = 0.0F;
         this.setOnGround(true);
+        this.stairCooldown = STAIR_TICKS - 1;
         return true;
     }
 
@@ -686,18 +871,33 @@ public class MellstroyEntity extends Monster {
         }
     }
 
+    /** Clears exactly the one-by-two space a standing mob occupies. */
+    private void carveRushBody(ServerLevel level, BlockPos feet) {
+        this.mineRushBlock(level, feet);
+        this.mineRushBlock(level, feet.above());
+    }
+
+    private boolean canOccupy(ServerLevel level, BlockPos feet) {
+        return level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()
+                && level.getBlockState(feet.above()).getCollisionShape(level, feet.above()).isEmpty();
+    }
+
     private void mineRushBlock(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F
                 || TemporaryGoldBlocks.isProtected(level, pos)) {
             return;
         }
-        level.destroyBlock(pos, false, this);
+        // Quiet removal: no neighbour updates, so lava next to a carved hole
+        // does not start a chain reaction of fluid ticks.
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
     }
 
     /** Gold placed by the rush is not limited by the casual gold budget. */
     private boolean placeGoldRaw(ServerLevel level, BlockPos pos) {
-        return TemporaryGoldBlocks.place(level, pos, this.getUUID());
+        // Replaces air, water and lava. Quietly (no neighbour updates): the
+        // bridge must not make a whole Nether lava sea start flowing.
+        return TemporaryGoldBlocks.placeForced(level, pos, this.getUUID());
     }
 
     /**
@@ -781,30 +981,64 @@ public class MellstroyEntity extends Monster {
     }
 
     private boolean canAcquire(Player player) {
+        if (this.hideCooldown > 0) {
+            // A successful hide really lasts thirty seconds: he searches the
+            // last known position instead of magically spotting you again.
+            // Standing up in his field of view still gives you away. This is
+            // checked before the house-rush shortcut, otherwise the rush
+            // target would be re-acquired one tick after hiding.
+            return !player.isShiftKeyDown()
+                    && this.distanceToSqr(player) < 36.0D
+                    && this.getSensing().hasLineOfSight(player);
+        }
         if (this.rushTargetId != null && this.rushTargetId.equals(player.getUUID())) {
             // The house rush target is always valid, even in creative.
             return true;
         }
-        if (this.hideCooldown > 0) {
-            // While sulking he can still hear you if you stand right next to him.
-            return this.distanceToSqr(player) < 36.0D && this.getSensing().hasLineOfSight(player);
-        }
         // He only starts a hunt when he can actually see you (or you are close
         // enough to hear). Otherwise he keeps living his own life.
+        if (this.level().dimension() == Level.NETHER) {
+            // The Nether is a maze of walls and lava: there he simply senses
+            // the player and cheats his way towards them.
+            return true;
+        }
         return this.distanceToSqr(player) < 64.0D || this.getSensing().hasLineOfSight(player);
     }
 
     private boolean isHidden(Player player) {
-        return player.isShiftKeyDown() && !this.getSensing().hasLineOfSight(player);
+        // Sneak, break line of sight and stop moving. Walking behind a tree
+        // while still moving does not count as hiding.
+        if (!player.isShiftKeyDown() || this.getSensing().hasLineOfSight(player)) {
+            this.hideAnchor = null;
+            return false;
+        }
+        if (this.hideAnchor == null) {
+            this.hideAnchor = player.position();
+            return true;
+        }
+        double movedX = player.getX() - this.hideAnchor.x;
+        double movedZ = player.getZ() - this.hideAnchor.z;
+        if (movedX * movedX + movedZ * movedZ > 0.25D) {
+            // More than half a block during the hide: start over.
+            this.hideAnchor = player.position();
+            return false;
+        }
+        return true;
     }
 
     private void loseTarget(Player player) {
         this.setTarget(null);
         this.lostTicks = 0;
+        this.hideVisibleTicks = 0;
+        this.escapeTicks = 0;
+        this.hideAnchor = null;
         this.climbTicks = 0;
+        this.pillarCooldown = 0;
+        this.stairCooldown = 0;
         this.hideCooldown = HIDE_COOLDOWN_TICKS;
         this.searchTicks = SEARCH_TICKS;
-        this.lastKnownPos = player.position();
+        // lastKnownPos is deliberately NOT updated here: it must remain the
+        // place where he actually saw the player, not the hiding spot.
         this.lostSoundTick = this.tickCount + LOST_SOUND_DELAY;
         this.desperate = false;
         this.chaseTicks = 0;
@@ -820,6 +1054,9 @@ public class MellstroyEntity extends Monster {
 
     private void onSpotted(Player player) {
         this.lostTicks = 0;
+        this.hideVisibleTicks = 0;
+        this.escapeTicks = 0;
+        this.hideAnchor = null;
         this.searchTicks = 0;
         this.lostSoundTick = -1;
         // Let "I see you" finish before the first chase phrase can start.
@@ -1150,15 +1387,20 @@ public class MellstroyEntity extends Monster {
         this.rushTargetId = target.getUUID();
         this.houseRushTicks = 20 * 120;
         this.lostTicks = 0;
+        this.hideVisibleTicks = 0;
+        this.escapeTicks = 0;
+        this.pillarCooldown = 0;
+        this.stairCooldown = 0;
         this.hideCooldown = 0;
         this.searchTicks = 0;
         this.lostSoundTick = -1;
         this.climbTicks = 0;
         this.chaseTargetId = target.getUUID();
         this.chaseTicks = 0;
-        // The house rush is always an all-out rush, even if the timer runs out
-        // before he arrives.
-        this.desperate = true;
+        // isRushing() is already true because of houseRushTicks. Keep the
+        // desperate flag free so the one-minute all-out sound can still play
+        // if this rush lasts that long.
+        this.desperate = false;
         this.setTarget(target);
         this.setMovementSpeed(0.8D);
     }
@@ -1169,6 +1411,11 @@ public class MellstroyEntity extends Monster {
      * target re-acquires it instead of wandering off.
      */
     public void keepRushing(Player target) {
+        if (this.hideCooldown > 0 && this.getTarget() == null) {
+            // The player hid successfully: let him search for the promised
+            // thirty seconds instead of snapping straight back onto them.
+            return;
+        }
         if (this.houseRushTicks <= 0 || this.rushTargetId == null
                 || !this.rushTargetId.equals(target.getUUID())) {
             this.summonForHouse(target);
@@ -1187,6 +1434,11 @@ public class MellstroyEntity extends Monster {
     @Nullable
     private Player findNearestTarget() {
         double range = MellstroyConfig.huntRange();
+        if (this.level().dimension() == Level.NETHER) {
+            // He can be spawned further away than the normal hunt range in
+            // the Nether (the terrain is too broken for short searches).
+            range = Math.max(range, 128.0D);
+        }
         Player best = null;
         double bestDistance = range * range;
 

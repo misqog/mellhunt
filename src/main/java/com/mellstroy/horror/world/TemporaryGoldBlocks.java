@@ -56,6 +56,33 @@ public final class TemporaryGoldBlocks {
         return true;
     }
 
+    /**
+     * Rush variant: places gold over air or a fluid (including lava) with no
+     * neighbour updates. Carving or bridging next to a Nether lava sea must
+     * not schedule thousands of fluid ticks, which used to freeze the server.
+     */
+    public static boolean placeForced(ServerLevel level, BlockPos pos, UUID owner) {
+        if (!level.isLoaded(pos)) {
+            return false;
+        }
+
+        BlockState current = level.getBlockState(pos);
+        boolean replaceable = current.isAir()
+                || current.canBeReplaced()
+                || !current.getFluidState().isEmpty();
+        if (!replaceable) {
+            return false;
+        }
+
+        if (!level.setBlock(pos, Blocks.GOLD_BLOCK.defaultBlockState(), 2)) {
+            return false;
+        }
+
+        Map<BlockPos, Entry> levelBlocks = BLOCKS.computeIfAbsent(level.dimension(), key -> new HashMap<>());
+        levelBlocks.put(pos.immutable(), new Entry(owner, level.getGameTime() + LIFETIME_TICKS));
+        return true;
+    }
+
     public static boolean isProtected(ServerLevel level, BlockPos pos) {
         Map<BlockPos, Entry> levelBlocks = BLOCKS.get(level.dimension());
         return levelBlocks != null
@@ -76,7 +103,8 @@ public final class TemporaryGoldBlocks {
             if (entry.getValue().owner().equals(owner)) {
                 BlockPos pos = entry.getKey();
                 if (level.getBlockState(pos).is(Blocks.GOLD_BLOCK)) {
-                    level.removeBlock(pos, false);
+                    // Quiet removal: no cascade of neighbour/fluid updates.
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
                 }
                 iterator.remove();
             }
@@ -100,7 +128,8 @@ public final class TemporaryGoldBlocks {
                 if (now >= entry.getValue().expiresAt()) {
                     BlockPos pos = entry.getKey();
                     if (level.getBlockState(pos).is(Blocks.GOLD_BLOCK)) {
-                        level.removeBlock(pos, false);
+                        // Quiet removal: no cascade of neighbour/fluid updates.
+                        level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
                     }
                     iterator.remove();
                 }

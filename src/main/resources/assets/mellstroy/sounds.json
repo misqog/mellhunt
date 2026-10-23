@@ -40,6 +40,11 @@
       { "name": "mellstroy:mellstroy/artur", "attenuation_distance": 64 }
     ]
   },
+  "mellstroy.seks": {
+    "sounds": [
+      { "name": "mellstroy:mellstroy/seks", "attenuation_distance": 96 }
+    ]
+  },
   "mellstroy.phrase1": {
     "subtitle": "subtitles.mellstroy.phrase",
     "sounds": [
