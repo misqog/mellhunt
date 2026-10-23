@@ -6,6 +6,7 @@ import com.mellstroy.horror.entity.MellstroyEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.GameType;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.client.gui.overlay.ForgeGui;
@@ -33,6 +34,12 @@ public final class ClientFear {
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) {
+            fear = 0.0F;
+            flash = 0.0F;
+            return;
+        }
+
+        if (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE) {
             fear = 0.0F;
             flash = 0.0F;
             return;
@@ -66,7 +73,8 @@ public final class ClientFear {
     /** Registered in {@link ClientSetup}. */
     static void renderOverlay(ForgeGui gui, GuiGraphics graphics, float partialTick, int width, int height) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.options.hideGui) {
+        if (mc.player == null || mc.options.hideGui
+                || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)) {
             return;
         }
 
@@ -114,7 +122,7 @@ public final class ClientFear {
         }
 
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null) {
+        if (mc.player == null || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)) {
             return;
         }
 

@@ -16,7 +16,7 @@
   "message.mellstroy.win": "JACKPOT! You survived. Mellstroy is gone.",
   "message.mellstroy.lose": "You lost. Everything belongs to Mellstroy now.",
 
-  "casino.mellstroy.title": "MELLSTROY'S CASINO",
+  "casino.mellstroy.title": "mellstroy.game",
   "casino.mellstroy.subtitle": "One spin. Jackpot is your life.",
   "casino.mellstroy.spin": "SPIN",
   "casino.mellstroy.chance": "Jackpot chance: %s%%",

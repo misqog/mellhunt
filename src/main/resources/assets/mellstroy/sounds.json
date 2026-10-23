@@ -35,6 +35,11 @@
       { "name": "mellstroy:mellstroy/prokrutka" }
     ]
   },
+  "mellstroy.artur": {
+    "sounds": [
+      { "name": "mellstroy:mellstroy/artur", "attenuation_distance": 64 }
+    ]
+  },
   "mellstroy.phrase1": {
     "subtitle": "subtitles.mellstroy.phrase",
     "sounds": [

@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
@@ -39,11 +40,15 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FlowingFluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.pathfinder.BlockPathTypes;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.UUID;
 
 /**
  * Mellstroy.
@@ -59,6 +64,18 @@ public class MellstroyEntity extends Monster {
     private static final EntityDataAccessor<Boolean> DATA_HUNTING =
             SynchedEntityData.defineId(MellstroyEntity.class, EntityDataSerializers.BOOLEAN);
 
+    /** Used to find the single Mellstroy anywhere in any loaded chunk. */
+    private static final AABB EVERYWHERE =
+            new AABB(-3.0E7D, -2048.0D, -3.0E7D, 3.0E7D, 8192.0D, 3.0E7D);
+
+    /**
+     * UUID of the one Mellstroy that is allowed to exist right now. A freshly
+     * spawned Mellstroy always wins and deletes the previous one; a copy that
+     * is merely loaded from disk is deleted when a newer one is active.
+     */
+    @Nullable
+    private static UUID activeId;
+
     /** Ticks the player has to stay hidden before he loses them. */
     private static final int HIDE_TICKS = 40;
     /** How long he searches after losing a player. */
@@ -69,6 +86,13 @@ public class MellstroyEntity extends Monster {
     private static final int LOST_SOUND_DELAY = 7 * 20;
     /** After a casino win he ignores the player for a while. */
     public static final int GRACE_TICKS = 30 * 20;
+
+    /** He is teleported this many blocks above the water he was stuck in. */
+    private static final int WATER_ESCAPE_CLEARANCE = 4;
+    /** He never lands closer than this to the player after a water escape. */
+    private static final double WATER_ESCAPE_PLAYER_GAP = 24.0D;
+    /** A mob that stands still this long starts breaking through walls. */
+    private static final int STUCK_BREAK_TICKS = 3 * 20;
 
     private int lostTicks;
     private int hideCooldown;
@@ -90,6 +114,29 @@ public class MellstroyEntity extends Monster {
     private int goldResetTick;
     /** While positive he keeps building straight up and refuses to walk off the column. */
     private int climbTicks;
+    private int stuckTicks;
+    private int houseRushTicks;
+    private int waterEscapeCooldown;
+    @Nullable
+    private UUID rushTargetId;
+    private double previousStuckX = Double.NaN;
+    private double previousStuckZ = Double.NaN;
+
+    /** A chase that lasts this long makes him abandon pathfinding completely. */
+    private static final int DESPERATE_TICKS = 60 * 20;
+    /**
+     * Blocks per tick while rushing. Twenty blocks per second is faster than
+     * anything a player can do, and it makes a hundred block run take five
+     * seconds.
+     */
+    private static final double RUSH_STEP = 1.0D;
+    /** How long he has been chasing the current target without reaching them. */
+    private int chaseTicks;
+    private boolean desperate;
+    @Nullable
+    private UUID chaseTargetId;
+    /** Cooldown between random walks while there is nobody to hunt. */
+    private int idleStrollCooldown;
 
     public MellstroyEntity(EntityType<? extends MellstroyEntity> type, Level level) {
         super(type, level);
@@ -112,7 +159,7 @@ public class MellstroyEntity extends Monster {
         this.setPathfindingMalus(BlockPathTypes.POWDER_SNOW, -1.0F);
         this.goldResetTick = this.tickCount;
         this.setCustomName(Component.translatable("entity.mellstroy.mellstroy"));
-        this.setCustomNameVisible(true);
+        this.setCustomNameVisible(false);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -168,6 +215,25 @@ public class MellstroyEntity extends Monster {
             return;
         }
 
+        if (this.houseRushTicks > 0 && --this.houseRushTicks == 0) {
+            this.setMovementSpeed(0.36D);
+            this.rushTargetId = null;
+            // The rush itself is over, but if he still has the player in sight
+            // he keeps smashing through until he reaches them.
+            if (this.getTarget() instanceof Player stillHere && isValidTarget(stillHere)) {
+                this.desperate = true;
+            }
+        }
+
+        this.setCustomNameVisible(false);
+        if (!this.isRushing()) {
+            this.tickBreakThroughObstacles();
+        }
+        if (!this.isRushing() && this.waterEscapeCooldown <= 0 && this.needsWaterEscape()) {
+            this.waterEscapeCooldown = 20;
+            this.escapeWaterToPlayerHeight();
+        }
+
         if (this.hideCooldown > 0) {
             this.hideCooldown--;
         }
@@ -183,6 +249,7 @@ public class MellstroyEntity extends Monster {
         if (this.breakCooldown > 0) {
             this.breakCooldown--;
         }
+        if (this.waterEscapeCooldown > 0) this.waterEscapeCooldown--;
         if (this.tickCount - this.goldResetTick >= GOLD_BUDGET_REFRESH_TICKS) {
             this.goldResetTick = this.tickCount;
             this.goldBudget = GOLD_BUDGET;
@@ -214,7 +281,7 @@ public class MellstroyEntity extends Monster {
 
         if (target != null) {
             this.lastKnownPos = target.position();
-            if (isHidden(target)) {
+            if (this.houseRushTicks <= 0 && isHidden(target)) {
                 this.lostTicks++;
                 if (this.lostTicks >= HIDE_TICKS) {
                     loseTarget(target);
@@ -225,6 +292,11 @@ public class MellstroyEntity extends Monster {
             }
         } else {
             this.pathStuckTicks = 0;
+            if (this.houseRushTicks <= 0) {
+                this.desperate = false;
+                this.chaseTicks = 0;
+                this.chaseTargetId = null;
+            }
         }
 
         boolean hunting = target != null && isValidTarget(target);
@@ -236,7 +308,23 @@ public class MellstroyEntity extends Monster {
 
         if (hunting && target != null) {
             this.applyFear(target);
-            if (this.climbTicks > 0) {
+            this.tickChaseTimer(target);
+            if (this.isRushing()) {
+                // Only kill normal pathfinding while he is still far away;
+                // within three blocks the melee goal must be allowed to hit.
+                if (this.distanceToSqr(target) > 9.0D) {
+                    this.getNavigation().stop();
+                    // The goal selector runs before this method, so erase any
+                    // movement it queued: the rush itself moves him, nothing
+                    // else may drag him off course.
+                    this.getMoveControl().setWantedPosition(this.getX(), this.getY(), this.getZ(), 0.0D);
+                    this.setSpeed(0.0F);
+                    this.setXxa(0.0F);
+                    this.setYya(0.0F);
+                    this.setZza(0.0F);
+                }
+                this.rushTowards(target);
+            } else if (this.climbTicks > 0) {
                 this.tickClimb(target);
             } else {
                 this.tickMobility(target);
@@ -247,6 +335,9 @@ public class MellstroyEntity extends Monster {
                     && this.getNavigation().isDone() && this.tickCount % 20 == 0) {
                 // Walk over to the place he last saw you. Then wander.
                 this.getNavigation().moveTo(this.lastKnownPos.x, this.lastKnownPos.y, this.lastKnownPos.z, 0.8D);
+            } else if (this.searchTicks <= 0) {
+                // Nobody to hunt: he lives his own life and just wanders.
+                this.tickIdle();
             }
         }
 
@@ -438,6 +529,208 @@ public class MellstroyEntity extends Monster {
         }
     }
 
+    /* ------------------------------------------------------------------ */
+    /*  All-out rush                                                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * True while he ignores paths and simply demolishes everything between him
+     * and the player: the house rush, or a chase that has already lasted a
+     * whole minute.
+     */
+    private boolean isRushing() {
+        return this.houseRushTicks > 0 || this.desperate;
+    }
+
+    /**
+     * Counts how long the current chase has been going. If a whole minute
+     * passes without reaching the player he switches to the all-out rush, so
+     * no wall, mountain, ravine or tower can keep him away forever.
+     */
+    private void tickChaseTimer(Player target) {
+        if (this.chaseTargetId == null || !this.chaseTargetId.equals(target.getUUID())) {
+            this.chaseTargetId = target.getUUID();
+            this.chaseTicks = 0;
+            this.desperate = false;
+        }
+
+        if (this.distanceToSqr(target) <= 4.0D && this.getSensing().hasLineOfSight(target)) {
+            // Close enough to hit and in plain sight: the chase is over.
+            this.chaseTicks = 0;
+            return;
+        }
+
+        this.chaseTicks++;
+        if (this.chaseTicks >= DESPERATE_TICKS) {
+            this.desperate = true;
+        }
+    }
+
+    /**
+     * Covers up to twenty blocks per second straight towards the player.
+     * Everything in the way is destroyed without a pause, gaps are bridged
+     * with gold, and when the player is above him he pillars up one gold block
+     * per tick - exactly the fastest a player could ever place blocks.
+     */
+    private void rushTowards(Player target) {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return;
+        }
+
+        double dx = target.getX() - this.getX();
+        double dy = target.getY() - this.getY();
+        double dz = target.getZ() - this.getZ();
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        double distance = Math.sqrt(horizontal * horizontal + dy * dy);
+
+        if (distance <= 1.5D && this.getSensing().hasLineOfSight(target)) {
+            // Within reach and in plain sight: the melee goal finishes the job.
+            this.setDeltaMovement(Vec3.ZERO);
+            this.setOnGround(true);
+            return;
+        }
+
+        // Player above / below and roughly in the same column: straight up or
+        // straight down, building or digging as he goes. If that is blocked
+        // (bedrock, a barrier, somebody else's protected gold) he falls
+        // through to the horizontal carve below instead of freezing.
+        boolean vertical = false;
+        if (dy > 0.9D && horizontal <= 4.0D) {
+            vertical = this.rushPillarUp(level);
+        } else if (dy < -1.0D && horizontal <= 4.0D) {
+            vertical = this.rushDigDown(level);
+        } else if (horizontal < 0.05D) {
+            vertical = dy > 0.0D ? this.rushPillarUp(level) : this.rushDigDown(level);
+        }
+        if (vertical) {
+            return;
+        }
+
+        double step = Math.min(RUSH_STEP, horizontal);
+        double nextX = this.getX() + dx / horizontal * step;
+        double nextZ = this.getZ() + dz / horizontal * step;
+
+        BlockPos nextFeet = BlockPos.containing(nextX, this.getY() + 0.05D, nextZ);
+        // Demolish everything he is about to occupy. No path, no detour.
+        this.carveRushArea(level, nextFeet, 1, 2);
+
+        // One gold block per tick closes a gap under his feet. That is
+        // exactly as fast as the fastest possible player.
+        BlockPos support = nextFeet.below();
+        if (!level.getBlockState(support).isSolidRender(level, support)
+                && level.getFluidState(support).isEmpty()) {
+            this.placeGoldRaw(level, support);
+        }
+
+        this.setPos(nextX, this.getY(), nextZ);
+        this.setDeltaMovement(Vec3.ZERO);
+        this.fallDistance = 0.0F;
+        this.setOnGround(true);
+    }
+
+    /**
+     * Pillars up towards a player above him, one gold block per tick - the
+     * same rate as the fastest possible player. Returns false when the column
+     * cannot be cleared, so the caller can go around instead.
+     */
+    private boolean rushPillarUp(ServerLevel level) {
+        BlockPos feet = this.blockPosition();
+        if (feet.getY() >= level.getMaxBuildHeight() - 3) {
+            return false;
+        }
+
+        // Clear the whole column he is about to stand in (three wide, three
+        // high) so an overhang cannot stop the climb.
+        this.carveRushArea(level, feet, 1, 2);
+
+        if (!this.placeGoldRaw(level, feet)) {
+            return false;
+        }
+
+        this.setPos(this.getX(), feet.getY() + 1.0D, this.getZ());
+        this.setDeltaMovement(Vec3.ZERO);
+        this.fallDistance = 0.0F;
+        this.setOnGround(true);
+        return true;
+    }
+
+    /** Digs straight down towards a player below him. */
+    private boolean rushDigDown(ServerLevel level) {
+        BlockPos feet = this.blockPosition();
+        BlockPos below = feet.below();
+        if (below.getY() <= level.getMinBuildHeight()) {
+            return false;
+        }
+
+        this.mineRushBlock(level, below);
+        if (!level.getBlockState(below).getCollisionShape(level, below).isEmpty()) {
+            // Unbreakable floor (bedrock, barrier, protected gold).
+            return false;
+        }
+
+        this.setPos(this.getX(), feet.getY() - 1.0D, this.getZ());
+        this.setDeltaMovement(Vec3.ZERO);
+        this.fallDistance = 0.0F;
+        this.setOnGround(true);
+        return true;
+    }
+
+    /** Destroys everything in a small box without drops. */
+    private void carveRushArea(ServerLevel level, BlockPos center, int radius, int height) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                for (int dy = 0; dy <= height; dy++) {
+                    this.mineRushBlock(level, center.offset(dx, dy, dz));
+                }
+            }
+        }
+    }
+
+    private void mineRushBlock(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F
+                || TemporaryGoldBlocks.isProtected(level, pos)) {
+            return;
+        }
+        level.destroyBlock(pos, false, this);
+    }
+
+    /** Gold placed by the rush is not limited by the casual gold budget. */
+    private boolean placeGoldRaw(ServerLevel level, BlockPos pos) {
+        return TemporaryGoldBlocks.place(level, pos, this.getUUID());
+    }
+
+    /**
+     * When he cannot see any player he minds his own business: he strolls
+     * around the area instead of staring at the player through walls.
+     */
+    private void tickIdle() {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return;
+        }
+        if (this.idleStrollCooldown > 0) {
+            this.idleStrollCooldown--;
+            return;
+        }
+        this.idleStrollCooldown = 140 + this.random.nextInt(140);
+        if (!this.getNavigation().isDone()) {
+            return;
+        }
+
+        for (int attempt = 0; attempt < 8; attempt++) {
+            double angle = this.random.nextDouble() * Math.PI * 2.0D;
+            double distance = 8.0D + this.random.nextDouble() * 16.0D;
+            int x = (int) Math.floor(this.getX() + Math.cos(angle) * distance);
+            int z = (int) Math.floor(this.getZ() + Math.sin(angle) * distance);
+            if (!level.hasChunkAt(new BlockPos(x, this.getBlockY(), z))) {
+                continue;
+            }
+            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            this.getNavigation().moveTo(x + 0.5D, y, z + 0.5D, 0.7D);
+            return;
+        }
+    }
+
     private void stopForClimb() {
         this.getNavigation().stop();
         this.getMoveControl().setWantedPosition(this.getX(), this.getY(), this.getZ(), 0.0D);
@@ -488,11 +781,17 @@ public class MellstroyEntity extends Monster {
     }
 
     private boolean canAcquire(Player player) {
+        if (this.rushTargetId != null && this.rushTargetId.equals(player.getUUID())) {
+            // The house rush target is always valid, even in creative.
+            return true;
+        }
         if (this.hideCooldown > 0) {
             // While sulking he can still hear you if you stand right next to him.
             return this.distanceToSqr(player) < 36.0D && this.getSensing().hasLineOfSight(player);
         }
-        return true;
+        // He only starts a hunt when he can actually see you (or you are close
+        // enough to hear). Otherwise he keeps living his own life.
+        return this.distanceToSqr(player) < 64.0D || this.getSensing().hasLineOfSight(player);
     }
 
     private boolean isHidden(Player player) {
@@ -507,6 +806,9 @@ public class MellstroyEntity extends Monster {
         this.searchTicks = SEARCH_TICKS;
         this.lastKnownPos = player.position();
         this.lostSoundTick = this.tickCount + LOST_SOUND_DELAY;
+        this.desperate = false;
+        this.chaseTicks = 0;
+        this.chaseTargetId = null;
 
         if (player instanceof ServerPlayer serverPlayer) {
             serverPlayer.displayClientMessage(
@@ -534,12 +836,351 @@ public class MellstroyEntity extends Monster {
     }
 
     private void applyFear(Player player) {
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
         double distSqr = player.distanceToSqr(this);
         if (distSqr < 24.0D * 24.0D) {
             player.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 120, 0, false, false, false));
         }
         if (distSqr < 12.0D * 12.0D) {
             player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 80, 0, false, false, false));
+        }
+    }
+
+    /**
+     * After standing still for three seconds he stops trying to path around the
+     * obstacle and simply tunnels through it: a three-wide, three-high corridor
+     * straight towards the player. The block under his own feet is never
+     * touched, and he is moved into the freshly opened tunnel so the dig always
+     * results in actual progress.
+     */
+    private void tickBreakThroughObstacles() {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return;
+        }
+        if (!(this.getTarget() instanceof Player target) || !isValidTarget(target)
+                || this.distanceToSqr(target) < 3.5D * 3.5D) {
+            this.stuckTicks = 0;
+            this.previousStuckX = this.getX();
+            this.previousStuckZ = this.getZ();
+            return;
+        }
+        if (this.climbTicks > 0) {
+            // Building a column up to the player does not move him sideways;
+            // that must not be mistaken for being stuck.
+            this.stuckTicks = 0;
+            this.previousStuckX = this.getX();
+            this.previousStuckZ = this.getZ();
+            return;
+        }
+        double movedX = Double.isNaN(this.previousStuckX) ? 1.0D : this.getX() - this.previousStuckX;
+        double movedZ = Double.isNaN(this.previousStuckZ) ? 1.0D : this.getZ() - this.previousStuckZ;
+        this.previousStuckX = this.getX();
+        this.previousStuckZ = this.getZ();
+        if (movedX * movedX + movedZ * movedZ < 0.0025D) {
+            this.stuckTicks++;
+        } else {
+            this.stuckTicks = 0;
+        }
+        if (this.stuckTicks < STUCK_BREAK_TICKS) {
+            return;
+        }
+
+        BlockPos feet = this.blockPosition();
+        boolean broke = false;
+
+        // If he is actually wedged inside terrain (for example a waterfall
+        // pushed him into the dirt), free his own body first. The block under
+        // his feet is never touched - that one holds him up.
+        for (BlockPos inside : new BlockPos[]{feet, feet.above()}) {
+            if (inside.equals(feet) && this.getY() - feet.getY() >= 0.6D) {
+                // Standing on top of this block (including the usual tiny
+                // floating-point sink), not inside it.
+                continue;
+            }
+            BlockState state = level.getBlockState(inside);
+            if (state.isSuffocating(level, inside) && state.getDestroySpeed(level, inside) >= 0.0F
+                    && !TemporaryGoldBlocks.isProtected(level, inside)) {
+                level.destroyBlock(inside, true, this);
+                broke = true;
+            }
+        }
+
+        // Dragon mode: tunnel towards the player, not towards wherever his
+        // head happens to be looking while he is jumping against a wall.
+        broke |= digTunnelToward(level, target, feet, 5);
+
+        if (broke) {
+            this.stuckTicks = STUCK_BREAK_TICKS - 6;
+            this.advanceThroughTunnel(level, target, feet);
+            this.getNavigation().moveTo(target, 1.0D);
+        } else {
+            // Nothing solid in front of him: let the pathfinder retry soon and
+            // give him a small hop for a one-block ledge.
+            this.stuckTicks = STUCK_BREAK_TICKS - 20;
+            this.getNavigation().moveTo(target, 1.0D);
+            this.getJumpControl().jump();
+        }
+    }
+
+    /**
+     * Carves a walkable corridor towards the target: three blocks wide, three
+     * blocks tall and {@code depth} blocks deep. Blocks under his feet and the
+     * floor of the corridor are left alone.
+     */
+    private boolean digTunnelToward(ServerLevel level, Player target, BlockPos feet, int depth) {
+        int dx = target.getBlockX() - feet.getX();
+        int dz = target.getBlockZ() - feet.getZ();
+        int dirX = Integer.compare(dx, 0);
+        int dirZ = Integer.compare(dz, 0);
+        // A single axis keeps the tunnel wide enough to walk through.
+        if (Math.abs(dx) >= Math.abs(dz)) {
+            dirZ = 0;
+        } else {
+            dirX = 0;
+        }
+        if (dirX == 0 && dirZ == 0) {
+            return false;
+        }
+
+        int sideX = dirZ != 0 ? 1 : 0;
+        int sideZ = dirX != 0 ? 1 : 0;
+        boolean broke = false;
+
+        for (int step = 1; step <= depth; step++) {
+            BlockPos column = feet.offset(dirX * step, 0, dirZ * step);
+            for (int side = -1; side <= 1; side++) {
+                BlockPos base = column.offset(sideX * side, 0, sideZ * side);
+                for (int up = 0; up <= 2; up++) {
+                    broke |= mineForTunnel(level, base.above(up));
+                }
+            }
+        }
+        return broke;
+    }
+
+    private boolean mineForTunnel(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F
+                || TemporaryGoldBlocks.isProtected(level, pos)) {
+            return false;
+        }
+        // No drops: a dragon does not leave a loot trail, and hundreds of item
+        // entities would lag the server.
+        level.destroyBlock(pos, false, this);
+        return true;
+    }
+
+    /** Steps into the tunnel he just carved so he actually makes progress. */
+    private void advanceThroughTunnel(ServerLevel level, Player target, BlockPos feet) {
+        int dx = target.getBlockX() - feet.getX();
+        int dz = target.getBlockZ() - feet.getZ();
+        int dirX = Integer.compare(dx, 0);
+        int dirZ = Integer.compare(dz, 0);
+        if (Math.abs(dx) >= Math.abs(dz)) {
+            dirZ = 0;
+        } else {
+            dirX = 0;
+        }
+        if (dirX == 0 && dirZ == 0) {
+            return;
+        }
+
+        BlockPos ahead = feet.offset(dirX, 0, dirZ);
+        for (int up = 0; up <= 1; up++) {
+            BlockPos candidate = ahead.above(up);
+            BlockPos below = candidate.below();
+            if (!level.getBlockState(below).isSolidRender(level, below)) {
+                continue;
+            }
+            if (!level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
+                    || !level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()) {
+                continue;
+            }
+            this.setPos(candidate.getX() + 0.5D, candidate.getY(), candidate.getZ() + 0.5D);
+            this.setDeltaMovement(Vec3.ZERO);
+            this.fallDistance = 0.0F;
+            this.setOnGround(true);
+            return;
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Water escape                                                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * True when he is submerged, standing in a waterfall, or has been pushed
+     * inside blocks under flowing water. Normal navigation cannot get him out
+     * of those, so he is teleported to dry land.
+     */
+    private boolean needsWaterEscape() {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return false;
+        }
+        BlockPos feet = this.blockPosition();
+        if (this.isUnderWater()
+                || isFallingWater(level.getFluidState(feet))
+                || isFallingWater(level.getFluidState(feet.above()))) {
+            return true;
+        }
+        boolean buried = level.getBlockState(feet).isSuffocating(level, feet)
+                || level.getBlockState(feet.above()).isSuffocating(level, feet.above());
+        return buried && hasWaterNearby(level, feet, 2);
+    }
+
+    private static boolean hasWaterNearby(ServerLevel level, BlockPos center, int radius) {
+        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -radius, -radius),
+                center.offset(radius, radius, radius))) {
+            if (level.getFluidState(pos).is(FluidTags.WATER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Teleports him out of the water onto dry land. The landing spot is always
+     * at least {@link #WATER_ESCAPE_CLEARANCE} blocks above the water he was
+     * in and roughly at the player's height, but never right next to them.
+     */
+    private void escapeWaterToPlayerHeight() {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return;
+        }
+        Player nearest = findNearestPlayer();
+        if (nearest == null) {
+            return;
+        }
+
+        BlockPos origin = this.blockPosition();
+        int clearanceY = waterSurfaceY(level, origin) + WATER_ESCAPE_CLEARANCE;
+        int desiredY = Math.max(nearest.getBlockY(), clearanceY);
+
+        BlockPos destination = findDryLanding(level, origin, nearest, desiredY, clearanceY, 72,
+                WATER_ESCAPE_PLAYER_GAP);
+        if (destination == null) {
+            // Last resort: a wider search that only keeps a small gap.
+            destination = findDryLanding(level, origin, nearest, desiredY, clearanceY, 96, 16.0D);
+        }
+        if (destination == null) {
+            return;
+        }
+
+        this.teleportTo(destination.getX() + 0.5D, destination.getY(), destination.getZ() + 0.5D);
+        this.setDeltaMovement(Vec3.ZERO);
+        this.fallDistance = 0.0F;
+        this.getNavigation().stop();
+    }
+
+    @Nullable
+    private Player findNearestPlayer() {
+        Player best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Player player : this.level().players()) {
+            if (!player.isAlive() || player.isSpectator()) {
+                continue;
+            }
+            double distance = this.distanceToSqr(player);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = player;
+            }
+        }
+        return best;
+    }
+
+    /** Topmost water block in his column, including falling water above him. */
+    private static int waterSurfaceY(ServerLevel level, BlockPos origin) {
+        int top = origin.getY() - 1;
+        for (int y = origin.getY() - 2; y <= origin.getY() + 8; y++) {
+            if (level.getFluidState(new BlockPos(origin.getX(), y, origin.getZ())).is(FluidTags.WATER)) {
+                top = y;
+            }
+        }
+        return Math.max(top, origin.getY() - 1);
+    }
+
+    @Nullable
+    private static BlockPos findDryLanding(ServerLevel level, BlockPos origin, Player player,
+                                           int desiredY, int minimumY, int maxRadius, double playerGap) {
+        BlockPos best = null;
+        double bestScore = Double.MAX_VALUE;
+        for (int radius = 8; radius <= maxRadius; radius += 4) {
+            for (int attempt = 0; attempt < 64; attempt++) {
+                double angle = level.random.nextDouble() * Math.PI * 2.0D;
+                int x = origin.getX() + (int) Math.round(Math.cos(angle) * radius);
+                int z = origin.getZ() + (int) Math.round(Math.sin(angle) * radius);
+                if (!level.hasChunkAt(new BlockPos(x, level.getMinBuildHeight(), z))) {
+                    continue;
+                }
+                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                if (y < minimumY) {
+                    continue;
+                }
+                BlockPos feet = new BlockPos(x, y, z);
+                BlockPos ground = feet.below();
+                if (!level.getBlockState(ground).isSolidRender(level, ground)
+                        || !level.getBlockState(feet).isAir()
+                        || !level.getBlockState(feet.above()).isAir()
+                        || !level.getFluidState(feet).isEmpty()
+                        || !level.getFluidState(feet.above()).isEmpty()) {
+                    continue;
+                }
+                double playerDistance = player.distanceToSqr(x + 0.5D, y, z + 0.5D);
+                if (playerDistance < playerGap * playerGap) {
+                    continue;
+                }
+                double score = Math.abs(y - desiredY) * 4.0D
+                        + Math.abs(y - origin.getY()) + radius * 0.02D;
+                if (score < bestScore) {
+                    best = feet;
+                    bestScore = score;
+                }
+            }
+            if (best != null && Math.abs(best.getY() - desiredY) <= 4) {
+                break;
+            }
+        }
+        return best;
+    }
+
+    public void summonForHouse(Player target) {
+        this.rushTargetId = target.getUUID();
+        this.houseRushTicks = 20 * 120;
+        this.lostTicks = 0;
+        this.hideCooldown = 0;
+        this.searchTicks = 0;
+        this.lostSoundTick = -1;
+        this.climbTicks = 0;
+        this.chaseTargetId = target.getUUID();
+        this.chaseTicks = 0;
+        // The house rush is always an all-out rush, even if the timer runs out
+        // before he arrives.
+        this.desperate = true;
+        this.setTarget(target);
+        this.setMovementSpeed(0.8D);
+    }
+
+    /**
+     * Keeps an active house rush locked on the player who broke the block.
+     * Called by the alarm every time it ticks, so a mob that somehow lost the
+     * target re-acquires it instead of wandering off.
+     */
+    public void keepRushing(Player target) {
+        if (this.houseRushTicks <= 0 || this.rushTargetId == null
+                || !this.rushTargetId.equals(target.getUUID())) {
+            this.summonForHouse(target);
+        } else if (!(this.getTarget() instanceof Player current) || current != target) {
+            this.setTarget(target);
+        }
+    }
+
+    private void setMovementSpeed(double speed) {
+        var attribute = this.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (attribute != null) {
+            attribute.setBaseValue(speed);
         }
     }
 
@@ -563,11 +1204,18 @@ public class MellstroyEntity extends Monster {
     }
 
     private boolean isValidTarget(Player player) {
-        return player.isAlive()
-                && !player.isDeadOrDying()
-                && !player.isCreative()
-                && !player.isSpectator()
-                && player.level() == this.level();
+        if (!player.isAlive()
+                || player.isDeadOrDying()
+                || player.isSpectator()
+                || player.level() != this.level()) {
+            return false;
+        }
+        // During a house rush he keeps chasing the player who broke the block,
+        // even if that player is in creative mode.
+        if (this.rushTargetId != null && this.rushTargetId.equals(player.getUUID())) {
+            return true;
+        }
+        return !player.isCreative();
     }
 
     public boolean isHunting() {
@@ -676,6 +1324,9 @@ public class MellstroyEntity extends Monster {
         if (!this.level().isClientSide && this.level() instanceof ServerLevel level) {
             TemporaryGoldBlocks.clearMob(level, this.getUUID());
         }
+        if (activeId != null && activeId.equals(this.getUUID())) {
+            activeId = null;
+        }
         super.remove(reason);
     }
 
@@ -752,9 +1403,57 @@ public class MellstroyEntity extends Monster {
         return distance < 256.0D * 256.0D;
     }
 
+    @Override
+    public boolean shouldShowName() {
+        return false;
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Spawning                                                          */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Enforces "exactly one Mellstroy in the world". Called for every join.
+     * A fresh spawn always replaces the old one; an old copy that is only
+     * being loaded from disk is removed because a newer one is active.
+     *
+     * @return true when this join must be cancelled because the entity is an
+     *         outdated copy.
+     */
+    public static boolean handleJoin(ServerLevel level, MellstroyEntity mob, boolean loadedFromDisk) {
+        if (loadedFromDisk) {
+            if (activeId == null || activeId.equals(mob.getUUID())) {
+                activeId = mob.getUUID();
+                return false;
+            }
+            // An old copy is loading after the current one: drop it.
+            mob.discard();
+            return true;
+        }
+
+        activeId = mob.getUUID();
+        purgeOthers(level, mob.getUUID());
+        return false;
+    }
+
+    private static void purgeOthers(ServerLevel level, UUID keep) {
+        MinecraftServer server = level.getServer();
+        if (server == null) {
+            return;
+        }
+        for (ServerLevel other : server.getAllLevels()) {
+            for (MellstroyEntity mob : other.getEntitiesOfClass(MellstroyEntity.class, EVERYWHERE)) {
+                if (!mob.getUUID().equals(keep)) {
+                    mob.discard();
+                }
+            }
+        }
+    }
+
+    /** Called when the server stops so a new world starts from a clean slate. */
+    public static void resetActive() {
+        activeId = null;
+    }
 
     @Override
     @Nullable

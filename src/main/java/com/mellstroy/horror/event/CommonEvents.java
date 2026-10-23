@@ -6,6 +6,7 @@ import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.registry.ModEntities;
 import com.mellstroy.horror.registry.ModItems;
 import com.mellstroy.horror.spawn.MellstroyRespawnManager;
+import com.mellstroy.horror.world.MellstroyHouseManager;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.ChatFormatting;
@@ -22,7 +23,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.server.ServerLifecycleHooks;
@@ -146,7 +149,7 @@ public final class CommonEvents {
         if (!MellstroyConfig.naturalSpawn()) {
             return;
         }
-        if (MellstroyRespawnManager.isPending()) {
+        if (MellstroyRespawnManager.isPending() || MellstroyHouseManager.isRushActive()) {
             return;
         }
 
@@ -238,6 +241,31 @@ public final class CommonEvents {
             return true;
         }
         return false;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  One Mellstroy in the whole world                                  */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Every Mellstroy that enters a level goes through here. A newly spawned
+     * one deletes all previous copies, and an old copy loaded from a chunk is
+     * dropped as soon as a newer one is active.
+     */
+    @SubscribeEvent
+    public static void onMellstroyJoin(EntityJoinLevelEvent event) {
+        if (!(event.getEntity() instanceof MellstroyEntity mob)
+                || !(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        if (MellstroyEntity.handleJoin(level, mob, event.loadedFromDisk())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        MellstroyEntity.resetActive();
     }
 
     /* ------------------------------------------------------------------ */

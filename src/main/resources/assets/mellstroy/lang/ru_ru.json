@@ -16,7 +16,7 @@
   "message.mellstroy.win": "ДЖЕКПОТ! Ты выжил. Меллстрой ушёл.",
   "message.mellstroy.lose": "Ты проиграл. Всё остаётся Меллстрою.",
 
-  "casino.mellstroy.title": "КАЗИНО МЕЛЛСТРОЯ",
+  "casino.mellstroy.title": "mellstroy.game",
   "casino.mellstroy.subtitle": "Один шанс. Джекпот — жизнь.",
   "casino.mellstroy.spin": "КРУТИТЬ",
   "casino.mellstroy.chance": "Шанс джекпота: %s%%",

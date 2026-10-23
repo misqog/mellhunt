@@ -47,6 +47,11 @@ public final class ModNetwork {
                 .decoder(TrackedSoundPacket::decode)
                 .consumerMainThread(TrackedSoundPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(PlayerSoundPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(PlayerSoundPacket::encode)
+                .decoder(PlayerSoundPacket::decode)
+                .consumerMainThread(PlayerSoundPacket::handle)
+                .add();
     }
 
     public static void sendOpenCasino(ServerPlayer player, int winChance) {
@@ -84,6 +89,20 @@ public final class ModNetwork {
                 CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
             }
         }
+    }
+
+    /**
+     * Plays a sound in one player's ears, independent of any world position.
+     * Used for the "creepy noise" so it does not stay behind when the player
+     * moves away from the spot where the sound started.
+     */
+    public static void sendPlayerSound(ServerPlayer player, SoundEvent sound, float volume, float pitch) {
+        if (player == null || sound == null) {
+            return;
+        }
+
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new PlayerSoundPacket(sound.getLocation(), volume, pitch));
     }
 
     private ModNetwork() {

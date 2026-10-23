@@ -39,7 +39,7 @@ public final class MellstroyConfig {
     }
 
     public static int huntRange() {
-        return get(() -> COMMON.huntRange.get(), 96);
+        return get(() -> COMMON.huntRange.get(), 56);
     }
 
     public static boolean oneHitKill() {
@@ -125,7 +125,7 @@ public final class MellstroyConfig {
 
             this.huntRange = builder
                     .comment("How far (in blocks) Mellstroy can sense a player.")
-                    .defineInRange("huntRange", 96, 16, 256);
+                    .defineInRange("huntRange", 56, 16, 256);
 
             this.oneHitKill = builder
                     .comment("Kill the player with a single hit.")
