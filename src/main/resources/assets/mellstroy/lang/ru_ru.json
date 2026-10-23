@@ -1,0 +1,37 @@
+{
+  "entity.mellstroy.mellstroy": "Меллстрой",
+  "item.mellstroy.mellstroy_spawn_egg": "Яйцо призыва Меллстроя",
+
+  "message.mellstroy.spotted": "МЕЛЛСТРОЙ ТЕБЯ УВИДЕЛ",
+  "message.mellstroy.hidden": "Ты спрятался... пока что",
+  "message.mellstroy.caught": "МЕЛЛСТРОЙ ТЕБЯ ДОГНАЛ",
+  "message.mellstroy.arrived": "Ты здесь не один",
+  "message.mellstroy.summoned": "Меллстрой пришёл",
+  "message.mellstroy.no_space": "Здесь для него нет места",
+  "message.mellstroy.removed": "Меллстрой исчез. Пока что. (%s)",
+  "message.mellstroy.already_gone": "Его здесь нет",
+  "message.mellstroy.player_only": "Это может сделать только игрок",
+  "message.mellstroy.hint": "Меллстроя нельзя убить. Разорви линию взгляда, присядь и не двигайся — тогда он тебя потеряет.",
+  "message.mellstroy.casino": "Меллстрой даёт тебе один шанс. Испытай удачу.",
+  "message.mellstroy.win": "ДЖЕКПОТ! Ты выжил. Меллстрой ушёл.",
+  "message.mellstroy.lose": "Ты проиграл. Всё остаётся Меллстрою.",
+
+  "casino.mellstroy.title": "КАЗИНО МЕЛЛСТРОЯ",
+  "casino.mellstroy.subtitle": "Один шанс. Джекпот — жизнь.",
+  "casino.mellstroy.spin": "КРУТИТЬ",
+  "casino.mellstroy.chance": "Шанс джекпота: %s%%",
+  "casino.mellstroy.win": "ДЖЕКПОТ! ТЫ ЖИВ",
+  "casino.mellstroy.lose": "ПРОИГРЫШ",
+  "casino.mellstroy.waiting": "Нажми «КРУТИТЬ»",
+  "casino.mellstroy.spinning": "Барабаны крутятся...",
+  "casino.mellstroy.thanks": "Спасибо за игру",
+  "casino.mellstroy.rules": "7 или три одинаковых — джекпот",
+
+  "subtitles.mellstroy.uvidel": "Меллстрой: «Я тебя вижу»",
+  "subtitles.mellstroy.ne_dognal": "Меллстрой: «Не догнал»",
+  "subtitles.mellstroy.kill": "Меллстрой тебя догнал",
+  "subtitles.mellstroy.win_casino": "Джекпот",
+  "subtitles.mellstroy.lose_casino": "Проигрыш",
+  "subtitles.mellstroy.prokrutka": "Барабаны казино",
+  "subtitles.mellstroy.phrase": "Меллстрой говорит"
+}

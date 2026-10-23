@@ -1,0 +1,37 @@
+{
+  "entity.mellstroy.mellstroy": "Mellstroy",
+  "item.mellstroy.mellstroy_spawn_egg": "Mellstroy Spawn Egg",
+
+  "message.mellstroy.spotted": "MELLSTROY SEES YOU",
+  "message.mellstroy.hidden": "You are hidden... for now",
+  "message.mellstroy.caught": "MELLSTROY GOT YOU",
+  "message.mellstroy.arrived": "You are not alone",
+  "message.mellstroy.summoned": "Mellstroy has arrived",
+  "message.mellstroy.no_space": "No room for him here",
+  "message.mellstroy.removed": "Mellstroy is gone. For now. (%s)",
+  "message.mellstroy.already_gone": "He is not here",
+  "message.mellstroy.player_only": "Only a player can do that",
+  "message.mellstroy.hint": "Mellstroy cannot be killed. Break his line of sight, crouch and stay still to hide.",
+  "message.mellstroy.casino": "Mellstroy gives you one chance. Try your luck.",
+  "message.mellstroy.win": "JACKPOT! You survived. Mellstroy is gone.",
+  "message.mellstroy.lose": "You lost. Everything belongs to Mellstroy now.",
+
+  "casino.mellstroy.title": "MELLSTROY'S CASINO",
+  "casino.mellstroy.subtitle": "One spin. Jackpot is your life.",
+  "casino.mellstroy.spin": "SPIN",
+  "casino.mellstroy.chance": "Jackpot chance: %s%%",
+  "casino.mellstroy.win": "JACKPOT! YOU LIVE",
+  "casino.mellstroy.lose": "YOU LOST",
+  "casino.mellstroy.waiting": "Press SPIN",
+  "casino.mellstroy.spinning": "Spinning...",
+  "casino.mellstroy.thanks": "Thanks for playing",
+  "casino.mellstroy.rules": "7 or three of a kind = jackpot",
+
+  "subtitles.mellstroy.uvidel": "Mellstroy: \"I see you\"",
+  "subtitles.mellstroy.ne_dognal": "Mellstroy: \"Lost you\"",
+  "subtitles.mellstroy.kill": "Mellstroy caught you",
+  "subtitles.mellstroy.win_casino": "Jackpot",
+  "subtitles.mellstroy.lose_casino": "Loss",
+  "subtitles.mellstroy.prokrutka": "Casino reels",
+  "subtitles.mellstroy.phrase": "Mellstroy speaks"
+}
