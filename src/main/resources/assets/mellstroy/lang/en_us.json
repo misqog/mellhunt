@@ -1,6 +1,14 @@
 {
   "entity.mellstroy.mellstroy": "Mellstroy",
+  "entity.mellstroy.fat_cat": "Fat Cat",
   "item.mellstroy.mellstroy_spawn_egg": "Mellstroy Spawn Egg",
+  "item.mellstroy.fat_cat_spawn_egg": "Fat Cat Spawn Egg",
+  "item.mellstroy.chekushka": "Chekushka",
+  "item.mellstroy.chekushka.tooltip.give": "Throw it to Mellstroy and he will vanish for a few minutes.",
+  "item.mellstroy.chekushka.tooltip.drink": "Drink it: nausea and Strength II for 10 seconds. Mellstroy loses you.",
+  "itemGroup.mellstroy": "Mellstroy",
+  "advancements.mellstroy.chekushka.title": "A Chekushka for Luck",
+  "advancements.mellstroy.chekushka.description": "Craft a chekushka — now you have something to appease Mellstroy with.",
 
   "message.mellstroy.spotted": "MELLSTROY SEES YOU",
   "message.mellstroy.hidden": "You are hidden... for now",
@@ -14,7 +22,10 @@
   "message.mellstroy.hint": "Mellstroy cannot be killed. Break his line of sight, crouch and stay still to hide.",
   "message.mellstroy.casino": "Mellstroy gives you one chance. Try your luck.",
   "message.mellstroy.win": "JACKPOT! You survived. Mellstroy is gone.",
+  "message.mellstroy.casino.cat_egg": "Jackpot! You won a fat cat spawn egg!",
   "message.mellstroy.lose": "You lost. Everything belongs to Mellstroy now.",
+  "message.mellstroy.chekushka.drunk": "The chekushka hits hard. Mellstroy lost you.",
+  "message.mellstroy.chekushka.taken": "Mellstroy took the chekushka and vanished.",
 
   "casino.mellstroy.title": "mellstroy.game",
   "casino.mellstroy.subtitle": "One spin. Jackpot is your life.",
@@ -33,5 +44,6 @@
   "subtitles.mellstroy.win_casino": "Jackpot",
   "subtitles.mellstroy.lose_casino": "Loss",
   "subtitles.mellstroy.prokrutka": "Casino reels",
-  "subtitles.mellstroy.phrase": "Mellstroy speaks"
+  "subtitles.mellstroy.phrase": "Mellstroy speaks",
+  "subtitles.mellstroy.malishochek": "Malishochek"
 }

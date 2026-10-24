@@ -1,6 +1,14 @@
 {
   "entity.mellstroy.mellstroy": "Меллстрой",
+  "entity.mellstroy.fat_cat": "Толстый кот",
   "item.mellstroy.mellstroy_spawn_egg": "Яйцо призыва Меллстроя",
+  "item.mellstroy.fat_cat_spawn_egg": "Яйцо призыва толстого кота",
+  "item.mellstroy.chekushka": "Чекушка",
+  "item.mellstroy.chekushka.tooltip.give": "Брось её Меллстрою — и он исчезнет на несколько минут.",
+  "item.mellstroy.chekushka.tooltip.drink": "Выпей: тошнота и сила II на 10 секунд. Меллстрой потеряет тебя.",
+  "itemGroup.mellstroy": "Меллстрой",
+  "advancements.mellstroy.chekushka.title": "Чекушка на удачу",
+  "advancements.mellstroy.chekushka.description": "Скрафти чекушку — теперь есть чем задобрить Меллстроя.",
 
   "message.mellstroy.spotted": "МЕЛЛСТРОЙ ТЕБЯ УВИДЕЛ",
   "message.mellstroy.hidden": "Ты спрятался... пока что",
@@ -14,7 +22,10 @@
   "message.mellstroy.hint": "Меллстроя нельзя убить. Разорви линию взгляда, присядь и не двигайся — тогда он тебя потеряет.",
   "message.mellstroy.casino": "Меллстрой даёт тебе один шанс. Испытай удачу.",
   "message.mellstroy.win": "ДЖЕКПОТ! Ты выжил. Меллстрой ушёл.",
+  "message.mellstroy.casino.cat_egg": "Джекпот! Тебе выпало яйцо призыва котости!",
   "message.mellstroy.lose": "Ты проиграл. Всё остаётся Меллстрою.",
+  "message.mellstroy.chekushka.drunk": "Чекушка ударила в голову. Меллстрой потерял тебя.",
+  "message.mellstroy.chekushka.taken": "Меллстрой забрал чекушку и исчез.",
 
   "casino.mellstroy.title": "mellstroy.game",
   "casino.mellstroy.subtitle": "Один шанс. Джекпот — жизнь.",
@@ -33,5 +44,6 @@
   "subtitles.mellstroy.win_casino": "Джекпот",
   "subtitles.mellstroy.lose_casino": "Проигрыш",
   "subtitles.mellstroy.prokrutka": "Барабаны казино",
-  "subtitles.mellstroy.phrase": "Меллстрой говорит"
+  "subtitles.mellstroy.phrase": "Меллстрой говорит",
+  "subtitles.mellstroy.malishochek": "Малышочек"
 }

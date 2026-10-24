@@ -1,6 +1,7 @@
 package com.mellstroy.horror.event;
 
 import com.mellstroy.horror.MellstroyMod;
+import com.mellstroy.horror.casino.CasinoManager;
 import com.mellstroy.horror.config.MellstroyConfig;
 import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.registry.ModEntities;
@@ -13,11 +14,15 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,6 +30,7 @@ import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -166,6 +172,14 @@ public final class CommonEvents {
             return;
         }
         spawnTimer = MellstroyConfig.spawnIntervalSeconds() * 20;
+
+        // There is only one Mellstroy, and a fresh copy deletes the old one.
+        // Never do that while he is busy with someone (chasing them, rushing
+        // them, searching for them): in multiplayer it would look like he
+        // instantly switched to the player near whom the new copy appeared.
+        if (MellstroyEntity.isAnyOccupied(server)) {
+            return;
+        }
 
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         if (players.isEmpty()) {
@@ -369,6 +383,58 @@ public final class CommonEvents {
     /* ------------------------------------------------------------------ */
     /*  Misc                                                              */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Throwing a bottle of chekushka to Mellstroy buys the player a few
+     * minutes of peace: he catches the bottle, vanishes and only comes back
+     * on the usual far-away 3-7 minute timer.
+     *
+     * <p>Forge fires this after the stack has already been removed from the
+     * inventory, so cancelling it consumes the bottle without spawning an
+     * item entity on the ground.</p>
+     */
+    @SubscribeEvent
+    public static void onItemToss(ItemTossEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player) || player.isDeadOrDying()) {
+            return;
+        }
+        ItemStack stack = event.getEntity().getItem();
+        if (!stack.is(ModItems.CHEKUSHKA.get()) || CasinoManager.hasActiveSession()) {
+            return;
+        }
+
+        ServerLevel level = player.serverLevel();
+        MellstroyEntity mob = level.getEntitiesOfClass(MellstroyEntity.class,
+                        player.getBoundingBox().inflate(24.0D))
+                .stream().findFirst().orElse(null);
+        if (mob == null) {
+            // Nobody to give it to: it simply drops on the ground as usual.
+            return;
+        }
+
+        // He catches the bottle instead of it landing in the dirt. Only one is
+        // needed; return the rest if the whole stack was thrown away.
+        event.setCanceled(true);
+        int extra = stack.getCount() - 1;
+        if (extra > 0) {
+            player.getInventory().placeItemBackInInventory(
+                    new ItemStack(ModItems.CHEKUSHKA.get(), extra));
+        }
+
+        // No house alarm may summon a fresh copy right after he vanishes.
+        MellstroyHouseManager.stopAllRushes();
+
+        level.sendParticles(ParticleTypes.LARGE_SMOKE, mob.getX(), mob.getY() + 1.0D, mob.getZ(),
+                24, 0.4D, 0.9D, 0.4D, 0.02D);
+        level.playSound(null, mob.getX(), mob.getY(), mob.getZ(),
+                SoundEvents.ENDERMAN_TELEPORT, SoundSource.NEUTRAL, 1.0F, 0.8F);
+
+        mob.discard();
+        MellstroyRespawnManager.scheduleAfterCasino(level.getServer());
+
+        player.displayClientMessage(Component.translatable("message.mellstroy.chekushka.taken")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.ITALIC), true);
+    }
 
     @SubscribeEvent
     public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {

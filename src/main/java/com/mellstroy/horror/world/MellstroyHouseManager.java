@@ -2,6 +2,7 @@ package com.mellstroy.horror.world;
 
 import com.mellstroy.horror.MellstroyMod;
 import com.mellstroy.horror.casino.CasinoManager;
+import com.mellstroy.horror.entity.FatCatEntity;
 import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.network.ModNetwork;
 import com.mellstroy.horror.registry.ModEntities;
@@ -9,6 +10,7 @@ import com.mellstroy.horror.registry.ModSounds;
 import com.mellstroy.horror.spawn.MellstroyRespawnManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -19,6 +21,10 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -276,7 +282,83 @@ public final class MellstroyHouseManager {
         data.cells.add(Math.floorDiv(origin.getX() - data.anchorX + CELL_SIZE / 2, CELL_SIZE) + ","
                 + Math.floorDiv(origin.getZ() - data.anchorZ + CELL_SIZE / 2, CELL_SIZE));
         data.setDirty();
+
+        // 25% of newly placed houses get two house cats and eight fish items.
+        if (level.random.nextInt(100) < 25) {
+            spawnHouseCatsAndFish(level, origin, template);
+        }
         return true;
+    }
+
+    /**
+     * Scatters two wild house cats and eight fish items on the ground floor of
+     * the freshly placed house. The cats are marked so only they can trigger
+     * the one-time first-sight sound.
+     */
+    private static void spawnHouseCatsAndFish(ServerLevel level, BlockPos origin, StructureTemplate template) {
+        Vec3i size = template.getSize();
+        List<BlockPos> spots = new ArrayList<>();
+
+        for (int x = 1; x < size.getX() - 1; x++) {
+            for (int z = 1; z < size.getZ() - 1; z++) {
+                for (int y = 1; y < size.getY() - 1; y++) {
+                    BlockPos pos = origin.offset(x, y, z);
+                    if (!level.getBlockState(pos).isAir()) {
+                        continue;
+                    }
+                    BlockPos below = pos.below();
+                    if (level.getBlockState(below).isSolidRender(level, below)
+                            && level.getBlockState(pos.above()).isAir()) {
+                        spots.add(pos.immutable());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (spots.isEmpty()) {
+            return;
+        }
+
+        // Keep a copy so the requested 2 cats and 8 fish are always spawned,
+        // even if the house has fewer free floor tiles than that.
+        List<BlockPos> allSpots = new ArrayList<>(spots);
+
+        for (int i = 0; i < 2; i++) {
+            BlockPos spot = pickSpot(spots, allSpots, level);
+            FatCatEntity cat = ModEntities.FAT_CAT.get().create(level);
+            if (cat == null) {
+                continue;
+            }
+            cat.moveTo(spot.getX() + 0.5D, spot.getY(), spot.getZ() + 0.5D,
+                    level.random.nextFloat() * 360.0F, 0.0F);
+            cat.setHouseCat(true);
+            cat.setPersistenceRequired();
+            cat.finalizeSpawn(level, level.getCurrentDifficultyAt(spot), MobSpawnType.STRUCTURE, null, null);
+            level.addFreshEntity(cat);
+        }
+
+        Item[] fish = {Items.COD, Items.SALMON, Items.TROPICAL_FISH, Items.PUFFERFISH};
+        for (int i = 0; i < 8; i++) {
+            BlockPos spot = pickSpot(spots, allSpots, level);
+            Item item = fish[level.random.nextInt(fish.length)];
+            ItemEntity entity = new ItemEntity(level,
+                    spot.getX() + 0.5D, spot.getY() + 0.2D, spot.getZ() + 0.5D,
+                    new ItemStack(item));
+            entity.setDeltaMovement((level.random.nextDouble() - 0.5D) * 0.05D, 0.05D,
+                    (level.random.nextDouble() - 0.5D) * 0.05D);
+            entity.setPickUpDelay(10);
+            // Keep the fish lying around instead of despawning after five minutes.
+            entity.lifespan = Integer.MAX_VALUE;
+            level.addFreshEntity(entity);
+        }
+    }
+
+    private static BlockPos pickSpot(List<BlockPos> spots, List<BlockPos> allSpots, ServerLevel level) {
+        if (!spots.isEmpty()) {
+            return spots.remove(level.random.nextInt(spots.size()));
+        }
+        return allSpots.get(level.random.nextInt(allSpots.size()));
     }
 
     private static StructureTemplate loadTemplate(ServerLevel level) {
@@ -292,16 +374,17 @@ public final class MellstroyHouseManager {
         BlockPos house = containingHouse(data, broken);
         if (house == null) return;
 
-        // The first break starts the house story. Later breaks do not stack
-        // another Mellstroy on top of a rush that is already running, but once
-        // that rush is over the house can call him again.
-        if (data.triggeredHouses.contains(key(house)) && isRushActive()) return;
-
         if (!(event.getPlayer() instanceof ServerPlayer player)) return;
-        // The player is busy being caught (the casino screen is about to open):
-        // a new house rush now would create a second Mellstroy and a new alarm
-        // that the casino session does not know about.
-        if (CasinoManager.isInCasino(player)) return;
+
+        // There is only one Mellstroy. Never summon him while he is already
+        // busy with someone: chasing, rushing, searching a hidden player, or
+        // sitting in the casino of the player he just caught. Otherwise the
+        // new rush would replace him mid-chase and he would "instantly switch"
+        // to whoever broke this block. Once he is free again (for example
+        // after the kill), the next break can call him normally.
+        if (isRushActive() || MellstroyEntity.isAnyOccupied(level.getServer())
+                || CasinoManager.hasActiveSession()) return;
+
         if (!startHouseRush(level, house, player)) return;
         data.triggeredHouses.add(key(house));
         data.setDirty();
@@ -585,6 +668,16 @@ public final class MellstroyHouseManager {
             if (alarm.playerId.equals(playerId)) {
                 alarm.stop();
             }
+        }
+    }
+
+    /**
+     * Ends every house rush at once. Used when Mellstroy is made to vanish
+     * (the chekushka): no alarm may summon a fresh copy right after him.
+     */
+    public static void stopAllRushes() {
+        for (HouseAlarm alarm : List.copyOf(TICKING_ALARMS)) {
+            alarm.stop();
         }
     }
 

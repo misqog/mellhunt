@@ -14,6 +14,12 @@ public final class ClientSetup {
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ModEntities.MELLSTROY.get(), MellstroyRenderer::new);
+        event.registerEntityRenderer(ModEntities.FAT_CAT.get(), FatCatRenderer::new);
+    }
+
+    @SubscribeEvent
+    public static void onRegisterLayers(EntityRenderersEvent.RegisterLayerDefinitions event) {
+        event.registerLayerDefinition(FatCatModel.LAYER_LOCATION, FatCatModel::createBodyLayer);
     }
 
     @SubscribeEvent

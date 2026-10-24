@@ -4,6 +4,7 @@ import com.mellstroy.horror.MellstroyMod;
 import com.mellstroy.horror.config.MellstroyConfig;
 import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.network.ModNetwork;
+import com.mellstroy.horror.registry.ModItems;
 import com.mellstroy.horror.registry.ModSounds;
 import com.mellstroy.horror.spawn.MellstroyRespawnManager;
 import com.mellstroy.horror.world.MellstroyHouseManager;
@@ -17,6 +18,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -72,6 +74,11 @@ public final class CasinoManager {
     public static boolean isInCasino(ServerPlayer player) {
         Session session = SESSIONS.get(player.getUUID());
         return session != null && !session.resolving;
+    }
+
+    /** True while any player is being handled by the casino. */
+    public static boolean hasActiveSession() {
+        return !SESSIONS.isEmpty();
     }
 
     /* ------------------------------------------------------------------ */
@@ -231,6 +238,20 @@ public final class CasinoManager {
             player.displayClientMessage(
                     Component.translatable("message.mellstroy.win")
                             .withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), false);
+
+            // Bonus roll, only after a win: the win chance itself is untouched.
+            // The exact egg chance is itself random in [5, 15] percent every win.
+            int eggChance = 5 + player.getRandom().nextInt(11);
+            if (player.getRandom().nextInt(100) < eggChance) {
+                ItemStack egg = new ItemStack(ModItems.FAT_CAT_SPAWN_EGG.get());
+                if (!player.addItem(egg)) {
+                    player.drop(egg, false);
+                }
+                player.displayClientMessage(
+                        Component.translatable("message.mellstroy.casino.cat_egg")
+                                .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+            }
+
             SESSIONS.remove(player.getUUID());
             return;
         }

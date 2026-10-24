@@ -31,6 +31,8 @@ public final class ModSounds {
     public static final RegistryObject<SoundEvent> ARTUR = registerWorld("mellstroy.artur");
     /** Played when a one-minute chase turns into an all-out rush. */
     public static final RegistryObject<SoundEvent> SEKS = registerWorld("mellstroy.seks");
+    /** The cat's "malishochek" sound: egg spawns and the first house-cat sighting. */
+    public static final RegistryObject<SoundEvent> MALISHOCHEK = registerWorld("mellstroy.malishochek");
 
     /** Random phrases he shouts while chasing you. */
     public static final List<RegistryObject<SoundEvent>> PHRASES = List.of(

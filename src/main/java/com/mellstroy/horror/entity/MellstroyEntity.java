@@ -159,6 +159,13 @@ public class MellstroyEntity extends Monster {
     private boolean desperate;
     @Nullable
     private UUID chaseTargetId;
+    /**
+     * seks.ogg is about 2.42 seconds long. The rush starts only after the
+     * warning has finished, so the player hears it before Mellstroy speeds up.
+     */
+    private static final int SEKS_RUSH_DELAY_TICKS = 50;
+    private boolean seksRushPending;
+    private int seksRushAtTick;
     /** Ticks left before the next gold block of a pillar may be placed. */
     private int pillarCooldown;
     /** Ticks left before the next staircase step may be taken. */
@@ -374,6 +381,7 @@ public class MellstroyEntity extends Monster {
             this.lostTicks = 0;
             this.hideVisibleTicks = 0;
             this.escapeTicks = 0;
+            this.seksRushPending = false;
             if (this.houseRushTicks <= 0) {
                 this.desperate = false;
                 this.chaseTicks = 0;
@@ -453,7 +461,8 @@ public class MellstroyEntity extends Monster {
      * previous one has fully finished, plus a random 10-15 second pause.
      */
     private void tickPhrases(boolean hunting) {
-        if (!hunting || this.tickCount < this.nextPhraseTick) {
+        // Let seks.ogg finish before any random chase phrase can interrupt it.
+        if (!hunting || this.seksRushPending || this.tickCount < this.nextPhraseTick) {
             return;
         }
 
@@ -655,19 +664,33 @@ public class MellstroyEntity extends Monster {
             this.chaseTargetId = target.getUUID();
             this.chaseTicks = 0;
             this.desperate = false;
+            this.seksRushPending = false;
         }
 
         if (this.distanceToSqr(target) <= 4.0D && this.getSensing().hasLineOfSight(target)) {
             // Close enough to hit and in plain sight: the chase is over.
             this.chaseTicks = 0;
+            this.seksRushPending = false;
             return;
         }
 
         this.chaseTicks++;
+
+        // The warning sound comes first; the all-out rush starts only after
+        // the sound has finished.
+        if (this.seksRushPending) {
+            if (this.tickCount >= this.seksRushAtTick) {
+                this.desperate = true;
+                this.seksRushPending = false;
+            }
+            return;
+        }
+
         if (this.chaseTicks >= DESPERATE_TICKS && !this.desperate) {
-            this.desperate = true;
-            // A full minute without catching the player: the chase turns into
-            // an all-out rush and the special sound kicks in.
+            // A full minute without catching the player: play the special
+            // sound first. The rush itself is armed for when it ends.
+            this.seksRushPending = true;
+            this.seksRushAtTick = this.tickCount + SEKS_RUSH_DELAY_TICKS;
             if (target instanceof ServerPlayer serverPlayer) {
                 ModNetwork.sendPlayerSound(serverPlayer, ModSounds.SEKS.get(), 1.0F, 1.0F);
             }
@@ -1041,6 +1064,7 @@ public class MellstroyEntity extends Monster {
         // place where he actually saw the player, not the hiding spot.
         this.lostSoundTick = this.tickCount + LOST_SOUND_DELAY;
         this.desperate = false;
+        this.seksRushPending = false;
         this.chaseTicks = 0;
         this.chaseTargetId = null;
 
@@ -1401,6 +1425,7 @@ public class MellstroyEntity extends Monster {
         // desperate flag free so the one-minute all-out sound can still play
         // if this rush lasts that long.
         this.desperate = false;
+        this.seksRushPending = false;
         this.setTarget(target);
         this.setMovementSpeed(0.8D);
     }
@@ -1472,6 +1497,46 @@ public class MellstroyEntity extends Monster {
 
     public boolean isHunting() {
         return this.entityData.get(DATA_HUNTING);
+    }
+
+    /**
+     * True while he is already busy with a player: actively hunting one, in a
+     * house rush, or searching for someone who just hid. There is only one
+     * Mellstroy in the world, so a second event (for example another player
+     * breaking a block in a house) must not summon him again while this is
+     * true: the fresh copy would delete him mid-chase and look like he
+     * instantly switched targets.
+     */
+    public boolean isOccupied() {
+        if (this.getTarget() != null || this.isHunting() || this.searchTicks > 0) {
+            return true;
+        }
+        if (this.houseRushTicks > 0 && this.rushTargetId != null) {
+            // A rush only keeps him busy while the player it was called for is
+            // still here. Once that player is dead or logged out he is free
+            // again, so somebody else's house break can summon him.
+            MinecraftServer server = this.level().getServer();
+            ServerPlayer rushTarget = server == null ? null
+                    : server.getPlayerList().getPlayer(this.rushTargetId);
+            return rushTarget != null && rushTarget.isAlive()
+                    && rushTarget.serverLevel() == this.level();
+        }
+        return false;
+    }
+
+    /** True when any loaded Mellstroy in any dimension is busy with someone. */
+    public static boolean isAnyOccupied(@Nullable MinecraftServer server) {
+        if (server == null) {
+            return false;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            for (MellstroyEntity mob : level.getEntitiesOfClass(MellstroyEntity.class, EVERYWHERE)) {
+                if (mob.isOccupied()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /* ------------------------------------------------------------------ */

@@ -3,6 +3,7 @@ package com.mellstroy.horror;
 import com.mellstroy.horror.config.MellstroyConfig;
 import com.mellstroy.horror.network.ModNetwork;
 import com.mellstroy.horror.registry.ModEntities;
+import com.mellstroy.horror.registry.ModCreativeTabs;
 import com.mellstroy.horror.registry.ModItems;
 import com.mellstroy.horror.registry.ModSounds;
 import com.mojang.logging.LogUtils;
@@ -32,6 +33,7 @@ public class MellstroyMod {
 
         ModEntities.ENTITY_TYPES.register(modBus);
         ModItems.ITEMS.register(modBus);
+        ModCreativeTabs.TABS.register(modBus);
         ModSounds.SOUNDS.register(modBus);
 
         modBus.addListener(MellstroyMod::onCommonSetup);

@@ -45,6 +45,12 @@
       { "name": "mellstroy:mellstroy/seks", "attenuation_distance": 96 }
     ]
   },
+  "mellstroy.malishochek": {
+    "subtitle": "subtitles.mellstroy.malishochek",
+    "sounds": [
+      { "name": "mellstroy:mellstroy/malishochek", "attenuation_distance": 64 }
+    ]
+  },
   "mellstroy.phrase1": {
     "subtitle": "subtitles.mellstroy.phrase",
     "sounds": [
