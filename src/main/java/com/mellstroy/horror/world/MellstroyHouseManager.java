@@ -376,6 +376,10 @@ public final class MellstroyHouseManager {
 
         if (!(event.getPlayer() instanceof ServerPlayer player)) return;
 
+        // Creative is for building and testing: breaking the house must not
+        // summon Mellstroy. Survival, adventure and other modes are unchanged.
+        if (player.isCreative()) return;
+
         // There is only one Mellstroy. Never summon him while he is already
         // busy with someone: chasing, rushing, searching a hidden player, or
         // sitting in the casino of the player he just caught. Otherwise the
