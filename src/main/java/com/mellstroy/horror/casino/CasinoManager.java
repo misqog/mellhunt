@@ -6,6 +6,7 @@ import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.network.ModNetwork;
 import com.mellstroy.horror.registry.ModSounds;
 import com.mellstroy.horror.spawn.MellstroyRespawnManager;
+import com.mellstroy.horror.world.MellstroyHouseManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -137,6 +138,11 @@ public final class CasinoManager {
 
     private static void startSession(ServerPlayer player, MellstroyEntity mob) {
         ServerLevel level = player.serverLevel();
+
+        // The rush is over: he reached the player. Removing the house alarm here
+        // keeps its "МЕЛЛСТРОЙ УЖЕ БЛИЗКО" line from overwriting the catch
+        // message and prevents a new rush after a won casino.
+        MellstroyHouseManager.stopRush(player.getUUID());
 
         player.setHealth(player.getMaxHealth());
         player.clearFire();

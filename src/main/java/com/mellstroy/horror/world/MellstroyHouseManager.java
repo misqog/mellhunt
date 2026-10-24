@@ -1,6 +1,7 @@
 package com.mellstroy.horror.world;
 
 import com.mellstroy.horror.MellstroyMod;
+import com.mellstroy.horror.casino.CasinoManager;
 import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.network.ModNetwork;
 import com.mellstroy.horror.registry.ModEntities;
@@ -297,6 +298,10 @@ public final class MellstroyHouseManager {
         if (data.triggeredHouses.contains(key(house)) && isRushActive()) return;
 
         if (!(event.getPlayer() instanceof ServerPlayer player)) return;
+        // The player is busy being caught (the casino screen is about to open):
+        // a new house rush now would create a second Mellstroy and a new alarm
+        // that the casino session does not know about.
+        if (CasinoManager.isInCasino(player)) return;
         if (!startHouseRush(level, house, player)) return;
         data.triggeredHouses.add(key(house));
         data.setDirty();
@@ -444,9 +449,10 @@ public final class MellstroyHouseManager {
     /**
      * The red action-bar warning. It no longer counts down a fake number: it
      * shows Mellstroy's real distance to the player every single tick, from the
-     * moment the block is broken. If the tracked mob disappears it
-     * spawns him again at the rush distance, even while the casino respawn
-     * timer is pending.
+     * moment the block is broken. If the tracked mob disappears it spawns him
+     * again at the rush distance, even while the casino respawn timer is
+     * pending. The alarm ends as soon as he catches the player, so it never
+     * outlives the rush or restarts it after the casino.
      */
     private static final class HouseAlarm {
         private final ServerLevel level;
@@ -474,8 +480,16 @@ public final class MellstroyHouseManager {
         private void tick() {
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(playerId);
             if (player == null || player.serverLevel() != level || !player.isAlive()) {
-                releaseTickingChunk();
-                TICKING_ALARMS.remove(this);
+                stop();
+                return;
+            }
+
+            // He got the player: the casino (or death) takes over from here, so
+            // the rush is over. Without this the alarm would keep shouting over
+            // the "caught" message and, after a won casino removed him, would
+            // summon a brand new rush out of nowhere.
+            if (CasinoManager.isInCasino(player)) {
+                stop();
                 return;
             }
 
@@ -505,12 +519,17 @@ public final class MellstroyHouseManager {
 
             if (distance <= 2) {
                 if (++closeTicks >= 10) {
-                    releaseTickingChunk();
-                    TICKING_ALARMS.remove(this);
+                    stop();
                 }
             } else {
                 closeTicks = 0;
             }
+        }
+
+        /** Removes this alarm for good and releases the forced chunk. */
+        private void stop() {
+            releaseTickingChunk();
+            TICKING_ALARMS.remove(this);
         }
 
         /**
@@ -553,6 +572,20 @@ public final class MellstroyHouseManager {
     /** While a house rush is running natural spawning must not replace him. */
     public static boolean isRushActive() {
         return !TICKING_ALARMS.isEmpty();
+    }
+
+    /**
+     * Ends the house rush for one player, for example because Mellstroy caught
+     * them and the casino took over. The alarm must not outlive the catch:
+     * otherwise it would overwrite the "caught" message and, once the casino
+     * removes him, summon a fresh rush without the player breaking anything.
+     */
+    public static void stopRush(UUID playerId) {
+        for (HouseAlarm alarm : List.copyOf(TICKING_ALARMS)) {
+            if (alarm.playerId.equals(playerId)) {
+                alarm.stop();
+            }
+        }
     }
 
     @SubscribeEvent

@@ -46,7 +46,7 @@ public final class ModSounds {
     /** Length of the non-phrase sounds in seconds. */
     public static final float UVIDEL_SECONDS = 6.619F;
     public static final float WIN_CASINO_SECONDS = 2.505F;
-    public static final float LOSE_CASINO_SECONDS = 5.851F;
+    public static final float LOSE_CASINO_SECONDS = 1.394F;
     /** Length of prokrutka.ogg in seconds (mono, 48 kHz). */
     public static final float PROKRUTKA_SECONDS = 7.745F;
 
