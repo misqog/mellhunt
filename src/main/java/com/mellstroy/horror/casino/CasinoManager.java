@@ -18,11 +18,15 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.NeutralMob;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingChangeTargetEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -127,14 +131,31 @@ public final class CasinoManager {
         }
     }
 
+    /**
+     * While the player is lying on the ground in the casino, mobs must not
+     * acquire him as a target (and thus must not swarm or attack him). This
+     * covers every newly chosen target; {@link #startSession} also clears the
+     * targets mobs already had.
+     */
+    @SubscribeEvent
+    public static void onLivingChangeTarget(LivingChangeTargetEvent event) {
+        if (event.getNewTarget() instanceof ServerPlayer player
+                && SESSIONS.containsKey(player.getUUID())) {
+            event.setCanceled(true);
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         Session session = SESSIONS.remove(event.getEntity().getUUID());
-        if (session != null && event.getEntity() instanceof ServerPlayer player) {
-            MellstroyEntity mob = findMob(player.serverLevel(), session.mobId);
-            if (mob != null) {
-                mob.unfreeze();
-                mob.giveGrace(MellstroyEntity.GRACE_TICKS);
+        if (event.getEntity() instanceof ServerPlayer player) {
+            standUp(player);
+            if (session != null) {
+                MellstroyEntity mob = findMob(player.serverLevel(), session.mobId);
+                if (mob != null) {
+                    mob.unfreeze();
+                    mob.giveGrace(MellstroyEntity.GRACE_TICKS);
+                }
             }
         }
     }
@@ -157,6 +178,13 @@ public final class CasinoManager {
         player.removeAllEffects();
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 20 * 120, 6, false, false, false));
         player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 20 * 120, 3, false, false, false));
+
+        // Knocked down for the duration of the spin: he lies on the ground
+        // (prone pose) and every mob ignores him until he gets up again.
+        player.stopFallFlying();
+        player.setDeltaMovement(Vec3.ZERO);
+        player.setForcedPose(Pose.SWIMMING);
+        clearMobTargets(player);
 
         // He stands in front of you and does not move while you spin.
         mob.freezeInPlace();
@@ -219,6 +247,9 @@ public final class CasinoManager {
             return;
         }
         session.resolving = true;
+
+        // The casino is over: get up before the win/lose outcome is applied.
+        standUp(player);
 
         ServerLevel level = player.serverLevel();
         MellstroyEntity mob = findMob(level, session.mobId);
@@ -323,6 +354,30 @@ public final class CasinoManager {
     /* ------------------------------------------------------------------ */
     /*  Helpers                                                           */
     /* ------------------------------------------------------------------ */
+
+    /** Puts the player back on his feet (used when the casino ends or he logs out). */
+    private static void standUp(ServerPlayer player) {
+        player.setForcedPose(null);
+        player.setPose(Pose.STANDING);
+    }
+
+    /**
+     * Makes every mob around the player forget him: no target, no neutral
+     * anger, no chase. While he lies on the ground in the casino nothing may
+     * react to him.
+     */
+    private static void clearMobTargets(ServerPlayer player) {
+        for (Mob mob : player.serverLevel().getEntitiesOfClass(Mob.class,
+                player.getBoundingBox().inflate(128.0D))) {
+            if (mob.getTarget() == player) {
+                mob.setTarget(null);
+            }
+            if (mob instanceof NeutralMob neutral
+                    && player.getUUID().equals(neutral.getPersistentAngerTarget())) {
+                neutral.stopBeingAngry();
+            }
+        }
+    }
 
     private static MellstroyEntity findMob(ServerLevel level, UUID id) {
         return level.getEntity(id) instanceof MellstroyEntity mob ? mob : null;

@@ -6,6 +6,7 @@
   "item.mellstroy.chekushka": "Chekushka",
   "item.mellstroy.chekushka.tooltip.give": "Throw it to Mellstroy and he will vanish for a few minutes.",
   "item.mellstroy.chekushka.tooltip.drink": "Drink it: nausea and Strength II for 10 seconds. Mellstroy loses you.",
+  "item.mellstroy.chekushka.tooltip.place": "Shift + right-click to place it. Right-click a placed bottle to turn it.",
   "itemGroup.mellstroy": "Mellstroy",
   "advancements.mellstroy.chekushka.title": "A Chekushka for Luck",
   "advancements.mellstroy.chekushka.description": "Craft a chekushka — now you have something to appease Mellstroy with.",

@@ -2,6 +2,7 @@ package com.mellstroy.horror;
 
 import com.mellstroy.horror.config.MellstroyConfig;
 import com.mellstroy.horror.network.ModNetwork;
+import com.mellstroy.horror.registry.ModBlocks;
 import com.mellstroy.horror.registry.ModEntities;
 import com.mellstroy.horror.registry.ModCreativeTabs;
 import com.mellstroy.horror.registry.ModItems;
@@ -32,6 +33,7 @@ public class MellstroyMod {
         IEventBus modBus = context.getModEventBus();
 
         ModEntities.ENTITY_TYPES.register(modBus);
+        ModBlocks.BLOCKS.register(modBus);
         ModItems.ITEMS.register(modBus);
         ModCreativeTabs.TABS.register(modBus);
         ModSounds.SOUNDS.register(modBus);

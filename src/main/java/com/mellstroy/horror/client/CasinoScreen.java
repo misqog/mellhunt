@@ -7,9 +7,11 @@ import com.mellstroy.horror.registry.ModSounds;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -303,6 +305,26 @@ public class CasinoScreen extends Screen {
             return true;
         }
         return false;
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+        // The player is knocked down for the whole spin: lower the local
+        // camera and render him lying on the ground.
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.setForcedPose(Pose.SWIMMING);
+        }
+    }
+
+    @Override
+    public void removed() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.setForcedPose(null);
+        }
+        super.removed();
     }
 
     @Override

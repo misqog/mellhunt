@@ -65,6 +65,16 @@ public class MellstroyEntity extends Monster {
     private static final EntityDataAccessor<Boolean> DATA_HUNTING =
             SynchedEntityData.defineId(MellstroyEntity.class, EntityDataSerializers.BOOLEAN);
 
+    /**
+     * Entity id of the player he currently has a clear line of sight to, or -1.
+     *
+     * <p>The client uses this to decide whether the camera should shake: merely
+     * being close to him is not scary as long as he cannot actually see you
+     * (behind a wall, hiding, or just wandering nearby).</p>
+     */
+    private static final EntityDataAccessor<Integer> DATA_SEEING_PLAYER =
+            SynchedEntityData.defineId(MellstroyEntity.class, EntityDataSerializers.INT);
+
     /** Used to find the single Mellstroy anywhere in any loaded chunk. */
     private static final AABB EVERYWHERE =
             new AABB(-3.0E7D, -2048.0D, -3.0E7D, 3.0E7D, 8192.0D, 3.0E7D);
@@ -95,6 +105,12 @@ public class MellstroyEntity extends Monster {
     private static final int LOST_SOUND_DELAY = 7 * 20;
     /** After a casino win he ignores the player for a while. */
     public static final int GRACE_TICKS = 30 * 20;
+
+    /**
+     * Normal chase speed. Slightly above the old 0.36: sprinting away still
+     * works, but he closes the gap noticeably faster.
+     */
+    private static final double BASE_MOVEMENT_SPEED = 0.42D;
 
     /** He is teleported this many blocks above the water he was stuck in. */
     private static final int WATER_ESCAPE_CLEARANCE = 4;
@@ -200,7 +216,7 @@ public class MellstroyEntity extends Monster {
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
                 .add(Attributes.MAX_HEALTH, 1024.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.36D)
+                .add(Attributes.MOVEMENT_SPEED, BASE_MOVEMENT_SPEED)
                 .add(Attributes.ATTACK_DAMAGE, 512.0D)
                 .add(Attributes.FOLLOW_RANGE, 160.0D)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 1.0D)
@@ -212,6 +228,7 @@ public class MellstroyEntity extends Monster {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_HUNTING, false);
+        this.entityData.define(DATA_SEEING_PLAYER, -1);
     }
 
     @Override
@@ -262,11 +279,12 @@ public class MellstroyEntity extends Monster {
 
         // Frozen while the casino screen is open.
         if (this.isNoAi()) {
+            this.setSeeingPlayerId(-1);
             return;
         }
 
         if (this.houseRushTicks > 0 && --this.houseRushTicks == 0) {
-            this.setMovementSpeed(0.36D);
+            this.setMovementSpeed(BASE_MOVEMENT_SPEED);
             this.rushTargetId = null;
             // The rush itself is over, but if he still has the player in sight
             // he keeps smashing through until he reaches them.
@@ -393,6 +411,12 @@ public class MellstroyEntity extends Monster {
         if (this.entityData.get(DATA_HUNTING) != hunting) {
             this.entityData.set(DATA_HUNTING, hunting);
         }
+        // The camera only shakes while he can actually see the player: hiding
+        // behind cover or simply being close to a wandering Mellstroy is not
+        // enough. This is synced so the client does not have to raycast.
+        this.setSeeingPlayerId(target != null && this.getSensing().hasLineOfSight(target)
+                ? target.getId()
+                : -1);
 
         tickPhrases(hunting);
 
@@ -1499,6 +1523,17 @@ public class MellstroyEntity extends Monster {
         return this.entityData.get(DATA_HUNTING);
     }
 
+    /** Client-safe: true only while he actually has line of sight to this player. */
+    public boolean isSeeing(Player player) {
+        return player != null && this.entityData.get(DATA_SEEING_PLAYER) == player.getId();
+    }
+
+    private void setSeeingPlayerId(int playerId) {
+        if (this.entityData.get(DATA_SEEING_PLAYER) != playerId) {
+            this.entityData.set(DATA_SEEING_PLAYER, playerId);
+        }
+    }
+
     /**
      * True while he is already busy with a player: actively hunting one, in a
      * house rush, or searching for someone who just hid. There is only one
@@ -1547,6 +1582,7 @@ public class MellstroyEntity extends Monster {
     public void freezeInPlace() {
         this.setTarget(null);
         this.setNoAi(true);
+        this.setSeeingPlayerId(-1);
         this.climbTicks = 0;
         this.getNavigation().stop();
         this.setDeltaMovement(Vec3.ZERO);
@@ -1563,6 +1599,7 @@ public class MellstroyEntity extends Monster {
         this.lostSoundTick = -1;
         this.climbTicks = 0;
         this.setTarget(null);
+        this.setSeeingPlayerId(-1);
         this.setLastHurtByMob(null);
     }
 

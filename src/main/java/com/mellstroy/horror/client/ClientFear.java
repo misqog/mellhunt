@@ -14,9 +14,12 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+import javax.annotation.Nullable;
+
 /**
  * The client-side "fear" system: red vignette, full-screen flash and camera
- * shake, all driven by how close Mellstroy is.
+ * shake. The vignette is driven by how close Mellstroy is, while the camera
+ * only shakes while he can actually see the player.
  */
 @Mod.EventBusSubscriber(modid = MellstroyMod.MOD_ID, value = Dist.CLIENT)
 public final class ClientFear {
@@ -25,6 +28,8 @@ public final class ClientFear {
     private static float fear;
     /** 0..1, short full-screen red flash on being hit. */
     private static float flash;
+    /** True while the nearest Mellstroy can actually see the player. */
+    private static boolean seen;
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -36,21 +41,28 @@ public final class ClientFear {
         if (mc.player == null || mc.level == null) {
             fear = 0.0F;
             flash = 0.0F;
+            seen = false;
             return;
         }
 
         if (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE) {
             fear = 0.0F;
             flash = 0.0F;
+            seen = false;
             return;
         }
 
         if (!MellstroyConfig.redScreen()) {
             fear *= 0.8F;
+            seen = false;
             return;
         }
 
-        double nearest = nearestDistance(mc);
+        MellstroyEntity nearestMob = nearestMellstroy(mc);
+        double nearest = nearestMob == null ? Double.MAX_VALUE : nearestMob.distanceTo(mc.player);
+        // Only a Mellstroy who can actually see the player may shake the camera.
+        // Being close while he is searching or wandering around does not count.
+        seen = nearestMob != null && nearestMob.isSeeing(mc.player);
 
         float target = 0.0F;
         if (nearest < 30.0D) {
@@ -117,7 +129,9 @@ public final class ClientFear {
 
     @SubscribeEvent
     public static void onCamera(ViewportEvent.ComputeCameraAngles event) {
-        if (fear < 0.05F && flash < 0.05F) {
+        // No shake while he cannot see the player: the red vignette still
+        // reacts to his presence, but the camera stays steady.
+        if (!seen || (fear < 0.05F && flash < 0.05F)) {
             return;
         }
 
@@ -135,16 +149,19 @@ public final class ClientFear {
         event.setRoll(event.getRoll() + (float) Math.sin(time * 2.3F) * amp);
     }
 
-    private static double nearestDistance(Minecraft mc) {
-        double best = Double.MAX_VALUE;
+    @Nullable
+    private static MellstroyEntity nearestMellstroy(Minecraft mc) {
+        MellstroyEntity best = null;
+        double bestDistance = Double.MAX_VALUE;
         if (mc.level == null || mc.player == null) {
-            return best;
+            return null;
         }
         for (Entity entity : mc.level.entitiesForRendering()) {
-            if (entity instanceof MellstroyEntity) {
+            if (entity instanceof MellstroyEntity mob) {
                 double distance = entity.distanceTo(mc.player);
-                if (distance < best) {
-                    best = distance;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = mob;
                 }
             }
         }
