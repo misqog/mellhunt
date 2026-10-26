@@ -14,7 +14,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetwork {
 
-    private static final String PROTOCOL = "1";
+    private static final String PROTOCOL = "2";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MellstroyMod.MOD_ID, "main"),
@@ -58,8 +58,10 @@ public final class ModNetwork {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenCasinoPacket(winChance));
     }
 
-    public static void sendResult(ServerPlayer player, boolean won, int[] line) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new CasinoResultPacket(won, line));
+    public static void sendResult(ServerPlayer player, boolean won, int[] line,
+                                  boolean bonusRound, boolean secondChance) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new CasinoResultPacket(won, bonusRound, secondChance, line));
     }
 
     public static void sendSpin() {

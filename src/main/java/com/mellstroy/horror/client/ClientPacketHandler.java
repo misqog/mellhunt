@@ -50,9 +50,9 @@ public final class ClientPacketHandler {
                 SimpleSoundInstance.forUI(sound, pitch, volume));
     }
 
-    public static void showResult(boolean won, int[] line) {
+    public static void showResult(boolean won, int[] line, boolean bonusRound, boolean secondChance) {
         if (Minecraft.getInstance().screen instanceof CasinoScreen screen) {
-            screen.receiveResult(won, line);
+            screen.receiveResult(won, line, bonusRound, secondChance);
         }
     }
 

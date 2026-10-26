@@ -28,6 +28,10 @@ public final class ModSounds {
     public static final RegistryObject<SoundEvent> LOSE_CASINO = register("mellstroy.lose_casino");
     /** Slot reels spinning. The animation is stretched to the full length of this sound. */
     public static final RegistryObject<SoundEvent> PROKRUTKA = register("mellstroy.prokrutka");
+    /** Second spin of the bonus round ("посидим"). */
+    public static final RegistryObject<SoundEvent> IZI_BRIGI = register("mellstroy.izi_brigi");
+    /** Played instead of the losing sound when the 1% second chance is rolled. */
+    public static final RegistryObject<SoundEvent> POSIDIM = register("mellstroy.posidim");
     public static final RegistryObject<SoundEvent> ARTUR = registerWorld("mellstroy.artur");
     /** Played when a one-minute chase turns into an all-out rush. */
     public static final RegistryObject<SoundEvent> SEKS = registerWorld("mellstroy.seks");
@@ -51,6 +55,10 @@ public final class ModSounds {
     public static final float LOSE_CASINO_SECONDS = 1.394F;
     /** Length of prokrutka.ogg in seconds (mono, 48 kHz). */
     public static final float PROKRUTKA_SECONDS = 7.745F;
+    /** Length of izi_brigi.ogg in seconds (the bonus round reels). */
+    public static final float IZI_BRIGI_SECONDS = 9.324F;
+    /** Length of posidim.ogg in seconds (the 1% second-chance jingle). */
+    public static final float POSIDIM_SECONDS = 2.310F;
 
     private static RegistryObject<SoundEvent> register(String name) {
         return SOUNDS.register(name,

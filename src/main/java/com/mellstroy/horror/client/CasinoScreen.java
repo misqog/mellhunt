@@ -47,25 +47,37 @@ public class CasinoScreen extends Screen {
     private static final int RED = 0xFFFF5555;
     private static final int GREY = 0xFFB7A98C;
 
-    private final int winChance;
-    private final ItemStack[] symbolStacks = new ItemStack[CasinoSymbols.COUNT];
-
-    private final int[] reels = {
+    private static final int[] DEFAULT_REELS = {
             CasinoSymbols.DIAMOND,
             CasinoSymbols.GOLD,
             CasinoSymbols.EMERALD
     };
+    private static final float[] DEFAULT_SCROLL = {0.0F, 1.7F, 3.4F};
+
+    private final int winChance;
+    private final ItemStack[] symbolStacks = new ItemStack[CasinoSymbols.COUNT];
+
+    private final int[] reels = DEFAULT_REELS.clone();
     private final int[] finalLine = new int[3];
     private final boolean[] stopped = new boolean[3];
-    private final float[] scroll = {0.0F, 1.7F, 3.4F};
+    private final float[] scroll = DEFAULT_SCROLL.clone();
 
     private int ticks;
     private int spinStart = -1;
+    /** Length of the current spin sound in ticks (prokrutka or izi_brigi). */
+    private int spinTicks = CasinoTiming.SPIN_TICKS;
     private boolean hasResult;
     private boolean won;
+    /** This result is the second (bonus) spin and uses the izi_brigi sound. */
+    private boolean bonusRound;
+    /** A losing first spin rolled the 1%: posidim plays, then SPIN is enabled again. */
+    private boolean secondChance;
+    /** The posidim jingle has finished and the button is waiting for the second spin. */
+    private boolean bonusOffered;
     private boolean resultSoundPlayed;
     private boolean acked;
     private int closeAt = -1;
+    private int resetAt = -1;
 
     public CasinoScreen(int winChance) {
         super(Component.translatable("casino.mellstroy.title"));
@@ -75,10 +87,12 @@ public class CasinoScreen extends Screen {
         }
     }
 
-    public void receiveResult(boolean won, int[] line) {
+    public void receiveResult(boolean won, int[] line, boolean bonusRound, boolean secondChance) {
         if (this.hasResult) {
             return;
         }
+        this.bonusRound = bonusRound;
+        this.secondChance = secondChance;
         this.hasResult = true;
         this.won = won;
         for (int i = 0; i < 3; i++) {
@@ -97,11 +111,15 @@ public class CasinoScreen extends Screen {
             return;
         }
         this.spinStart = this.ticks;
+        this.bonusOffered = false;
 
-        // prokrutka.ogg is 7.745 seconds; the reel animation below is stretched
-        // to exactly that length.
+        // The first spin uses prokrutka.ogg (7.745 s); the 1% bonus spin uses
+        // izi_brigi.ogg (9.324 s). The reels are stretched to the same length.
+        boolean bonus = this.bonusRound;
+        this.spinTicks = bonus ? CasinoTiming.IZI_BRIGI_SPIN_TICKS : CasinoTiming.SPIN_TICKS;
+        SoundEvent spinSound = (bonus ? ModSounds.IZI_BRIGI : ModSounds.PROKRUTKA).get();
         Minecraft.getInstance().getSoundManager().play(
-                SimpleSoundInstance.forUI(ModSounds.PROKRUTKA.get(), 1.0F));
+                SimpleSoundInstance.forUI(spinSound, 1.0F));
 
         if (sendPacket) {
             ModNetwork.sendSpin();
@@ -119,7 +137,7 @@ public class CasinoScreen extends Screen {
         if (this.spinStart >= 0) {
             int elapsed = this.ticks - this.spinStart;
             for (int i = 0; i < 3; ++i) {
-                if (this.hasResult && elapsed >= CasinoTiming.REEL_STOP_TICKS[i]) {
+                if (this.hasResult && elapsed >= CasinoTiming.reelStopTicks(this.spinTicks, i)) {
                     if (!this.stopped[i]) {
                         this.stopped[i] = true;
                         this.reels[i] = this.finalLine[i];
@@ -134,8 +152,12 @@ public class CasinoScreen extends Screen {
         }
 
         if (this.hasResult && this.allStopped() && !this.resultSoundPlayed
-                && this.ticks >= this.spinStart + CasinoTiming.RESULT_START_TICKS) {
+                && this.ticks >= this.spinStart + CasinoTiming.resultStartTicks(this.spinTicks)) {
             this.playResult();
+        }
+
+        if (this.resetAt >= 0 && this.ticks >= this.resetAt) {
+            this.prepareBonusSpin();
         }
 
         if (this.closeAt >= 0 && this.ticks >= this.closeAt) {
@@ -153,11 +175,44 @@ public class CasinoScreen extends Screen {
 
     private void playResult() {
         this.resultSoundPlayed = true;
+
+        // The 1% second chance: no death sound, no closing. posidim.ogg plays
+        // and once it ends the reels reset and SPIN becomes active again.
+        if (this.secondChance) {
+            Minecraft.getInstance().getSoundManager().play(
+                    SimpleSoundInstance.forUI(ModSounds.POSIDIM.get(), 1.0F));
+            this.resetAt = this.ticks + Math.round(ModSounds.POSIDIM_SECONDS * 20.0F) + 6;
+            return;
+        }
+
         SoundEvent sound = (this.won ? ModSounds.WIN_CASINO : ModSounds.LOSE_CASINO).get();
         Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.0F));
 
         float seconds = this.won ? ModSounds.WIN_CASINO_SECONDS : ModSounds.LOSE_CASINO_SECONDS;
         this.closeAt = this.ticks + Math.round(seconds * 20.0F) + 6;
+    }
+
+    /**
+     * Turns the screen back into a fresh, clickable state for the bonus spin.
+     * The next press of SPIN uses izi_brigi.ogg and the usual win/lose rules.
+     */
+    private void prepareBonusSpin() {
+        this.resetAt = -1;
+        this.bonusOffered = true;
+        this.bonusRound = true;
+        this.hasResult = false;
+        this.won = false;
+        this.secondChance = false;
+        this.resultSoundPlayed = false;
+        this.spinStart = -1;
+        this.spinTicks = CasinoTiming.IZI_BRIGI_SPIN_TICKS;
+        this.closeAt = -1;
+        for (int i = 0; i < 3; ++i) {
+            this.stopped[i] = false;
+            this.reels[i] = DEFAULT_REELS[i];
+            this.scroll[i] = DEFAULT_SCROLL[i];
+            this.finalLine[i] = 0;
+        }
     }
 
     @Override
@@ -215,6 +270,9 @@ public class CasinoScreen extends Screen {
         } else if (this.spinStart >= 0) {
             status = Component.translatable("casino.mellstroy.spinning");
             statusColor = GREY;
+        } else if (this.bonusOffered) {
+            status = Component.translatable("casino.mellstroy.second_chance");
+            statusColor = GOLD;
         } else {
             status = Component.translatable("casino.mellstroy.waiting");
             statusColor = GREY;

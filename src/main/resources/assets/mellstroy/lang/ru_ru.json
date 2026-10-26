@@ -25,6 +25,7 @@
   "message.mellstroy.win": "ДЖЕКПОТ! Ты выжил. Меллстрой ушёл.",
   "message.mellstroy.casino.cat_egg": "Джекпот! Тебе выпало яйцо призыва котости!",
   "message.mellstroy.lose": "Ты проиграл. Всё остаётся Меллстрою.",
+  "message.mellstroy.casino.second_chance": "Тебе повезло: у тебя есть ещё один шанс. Крути.",
   "message.mellstroy.chekushka.drunk": "Чекушка ударила в голову. Меллстрой потерял тебя.",
   "message.mellstroy.chekushka.taken": "Меллстрой забрал чекушку и исчез.",
 
@@ -37,6 +38,7 @@
   "casino.mellstroy.waiting": "Нажми «КРУТИТЬ»",
   "casino.mellstroy.spinning": "Барабаны крутятся...",
   "casino.mellstroy.thanks": "Спасибо за игру",
+  "casino.mellstroy.second_chance": "ВТОРОЙ ШАНС! КРУТИ ЕЩЁ РАЗ",
   "casino.mellstroy.rules": "7 или три одинаковых — джекпот",
 
   "subtitles.mellstroy.uvidel": "Меллстрой: «Я тебя вижу»",
@@ -45,6 +47,8 @@
   "subtitles.mellstroy.win_casino": "Джекпот",
   "subtitles.mellstroy.lose_casino": "Проигрыш",
   "subtitles.mellstroy.prokrutka": "Барабаны казино",
+  "subtitles.mellstroy.izi_brigi": "Изя, бриги",
+  "subtitles.mellstroy.posidim": "Меллстрой: «Посидим»",
   "subtitles.mellstroy.phrase": "Меллстрой говорит",
   "subtitles.mellstroy.malishochek": "Малышочек"
 }

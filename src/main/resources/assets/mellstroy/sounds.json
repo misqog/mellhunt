@@ -35,6 +35,18 @@
       { "name": "mellstroy:mellstroy/prokrutka" }
     ]
   },
+  "mellstroy.izi_brigi": {
+    "subtitle": "subtitles.mellstroy.izi_brigi",
+    "sounds": [
+      { "name": "mellstroy:mellstroy/izi_brigi" }
+    ]
+  },
+  "mellstroy.posidim": {
+    "subtitle": "subtitles.mellstroy.posidim",
+    "sounds": [
+      { "name": "mellstroy:mellstroy/posidim" }
+    ]
+  },
   "mellstroy.artur": {
     "sounds": [
       { "name": "mellstroy:mellstroy/artur", "attenuation_distance": 64 }

@@ -25,6 +25,7 @@
   "message.mellstroy.win": "JACKPOT! You survived. Mellstroy is gone.",
   "message.mellstroy.casino.cat_egg": "Jackpot! You won a fat cat spawn egg!",
   "message.mellstroy.lose": "You lost. Everything belongs to Mellstroy now.",
+  "message.mellstroy.casino.second_chance": "Lucky you: you have one more spin.",
   "message.mellstroy.chekushka.drunk": "The chekushka hits hard. Mellstroy lost you.",
   "message.mellstroy.chekushka.taken": "Mellstroy took the chekushka and vanished.",
 
@@ -37,6 +38,7 @@
   "casino.mellstroy.waiting": "Press SPIN",
   "casino.mellstroy.spinning": "Spinning...",
   "casino.mellstroy.thanks": "Thanks for playing",
+  "casino.mellstroy.second_chance": "SECOND CHANCE! SPIN AGAIN",
   "casino.mellstroy.rules": "7 or three of a kind = jackpot",
 
   "subtitles.mellstroy.uvidel": "Mellstroy: \"I see you\"",
@@ -45,6 +47,8 @@
   "subtitles.mellstroy.win_casino": "Jackpot",
   "subtitles.mellstroy.lose_casino": "Loss",
   "subtitles.mellstroy.prokrutka": "Casino reels",
+  "subtitles.mellstroy.izi_brigi": "Izi brigi",
+  "subtitles.mellstroy.posidim": "Mellstroy: \"Sit with me\"",
   "subtitles.mellstroy.phrase": "Mellstroy speaks",
   "subtitles.mellstroy.malishochek": "Malishochek"
 }

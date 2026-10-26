@@ -54,24 +54,35 @@ public final class CasinoManager {
     private static final int AUTO_SPIN_TICKS = 25 * 20;
     /** Extra server-side delay after the sound, in case the client never acks. */
     private static final int SERVER_MARGIN_TICKS = 40;
+    /** Chance (percent) that a losing first spin grants one more spin. */
+    private static final int SECOND_CHANCE_PERCENT = 1;
 
     private static final Map<UUID, Session> SESSIONS = new HashMap<>();
 
     private static final class Session {
         private final UUID playerId;
         private final UUID mobId;
-        private final long startTick;
+        /** Game time at which the pending spin is auto-triggered. */
+        private long autoSpinAt;
         private int winChance;
         private boolean resultSent;
         private boolean won;
         private int[] line;
         private long resolveAt;
         private boolean resolving;
+        /** The current spin is the second (bonus) one and uses izi_brigi.ogg. */
+        private boolean bonusRound;
+        /** The current result is a losing first spin that rolled the 1% second chance. */
+        private boolean secondChance;
+        /** Game time when posidim.ogg has finished and SPIN may be pressed again. */
+        private long bonusReadyAt;
+        /** The delayed "second chance" chat line has already been shown. */
+        private boolean secondChanceAnnounced;
 
-        private Session(UUID playerId, UUID mobId, long startTick) {
+        private Session(UUID playerId, UUID mobId, long autoSpinAt) {
             this.playerId = playerId;
             this.mobId = mobId;
-            this.startTick = startTick;
+            this.autoSpinAt = autoSpinAt;
         }
     }
 
@@ -200,7 +211,8 @@ public final class CasinoManager {
                 Component.translatable("message.mellstroy.casino")
                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
 
-        Session session = new Session(player.getUUID(), mob.getUUID(), level.getGameTime());
+        Session session = new Session(player.getUUID(), mob.getUUID(),
+                level.getGameTime() + AUTO_SPIN_TICKS);
         session.winChance = MellstroyConfig.randomCasinoWinChance(player.getRandom());
         SESSIONS.put(player.getUUID(), session);
 
@@ -208,7 +220,43 @@ public final class CasinoManager {
     }
 
     public static void handleSpin(ServerPlayer player) {
+        Session session = SESSIONS.get(player.getUUID());
+        if (session == null) {
+            return;
+        }
+        if (!session.resultSent) {
+            spin(player);
+        } else if (session.secondChance
+                && player.serverLevel().getGameTime() >= session.bonusReadyAt) {
+            startBonusSpin(player, session);
+        }
+    }
+
+    /** The player presses SPIN again after the posidim jingle: roll the bonus round. */
+    private static void startBonusSpin(ServerPlayer player, Session session) {
+        if (session.resolving || !session.secondChance) {
+            return;
+        }
+        announceSecondChance(player, session);
+        session.bonusRound = true;
+        session.secondChance = false;
+        session.resultSent = false;
+        session.won = false;
+        session.line = null;
+        session.resolveAt = Long.MAX_VALUE;
+        session.autoSpinAt = Long.MAX_VALUE;
         spin(player);
+    }
+
+    /** Shows the second-chance line exactly once, after posidim.ogg has ended. */
+    private static void announceSecondChance(ServerPlayer player, Session session) {
+        if (session.secondChanceAnnounced) {
+            return;
+        }
+        session.secondChanceAnnounced = true;
+        player.displayClientMessage(
+                Component.translatable("message.mellstroy.casino.second_chance")
+                        .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
     }
 
     private static void spin(ServerPlayer player) {
@@ -223,21 +271,50 @@ public final class CasinoManager {
                 : CasinoSymbols.randomLosing(player.getRandom());
         session.resultSent = true;
 
-        float soundSeconds = session.won ? ModSounds.WIN_CASINO_SECONDS : ModSounds.LOSE_CASINO_SECONDS;
-        // The client first plays the full reel animation, then the win/lose sound.
-        // The fallback (in case the ack never arrives) must outlast both.
-        session.resolveAt = player.serverLevel().getGameTime()
-                + CasinoTiming.SPIN_TICKS
-                + CasinoTiming.RESULT_SOUND_DELAY_TICKS
-                + Math.round(soundSeconds * 20.0F)
-                + SERVER_MARGIN_TICKS;
+        // 1% second chance, only after a losing first spin. The bonus spin
+        // itself can never roll another one.
+        session.secondChance = !session.won && !session.bonusRound
+                && player.getRandom().nextInt(100) < SECOND_CHANCE_PERCENT;
 
-        ModNetwork.sendResult(player, session.won, session.line);
+        long now = player.serverLevel().getGameTime();
+        int spinTicks = session.bonusRound
+                ? CasinoTiming.IZI_BRIGI_SPIN_TICKS
+                : CasinoTiming.SPIN_TICKS;
+
+        if (session.secondChance) {
+            // posidim.ogg plays instead of the losing sound. The server waits
+            // for the player to press SPIN again; if he never does, the bonus
+            // spin is auto-triggered once the jingle and the idle time pass.
+            // The chat line is deliberately delayed until the jingle ends so
+            // it cannot spoil the result while the reels are still spinning.
+            int posidimTicks = Math.round(ModSounds.POSIDIM_SECONDS * 20.0F);
+            session.bonusReadyAt = now
+                    + CasinoTiming.resultStartTicks(spinTicks)
+                    + posidimTicks
+                    + 6;
+            session.autoSpinAt = session.bonusReadyAt + AUTO_SPIN_TICKS;
+            session.secondChanceAnnounced = false;
+            session.resolveAt = Long.MAX_VALUE;
+        } else {
+            float soundSeconds = session.won
+                    ? ModSounds.WIN_CASINO_SECONDS
+                    : ModSounds.LOSE_CASINO_SECONDS;
+            // The client first plays the full reel animation, then the result
+            // sound. The fallback (in case the ack never arrives) must outlast both.
+            session.resolveAt = now
+                    + CasinoTiming.resultStartTicks(spinTicks)
+                    + Math.round(soundSeconds * 20.0F)
+                    + SERVER_MARGIN_TICKS;
+        }
+
+        ModNetwork.sendResult(player, session.won, session.line,
+                session.bonusRound, session.secondChance);
     }
 
     public static void handleAck(ServerPlayer player) {
         Session session = SESSIONS.get(player.getUUID());
-        if (session != null && session.resultSent) {
+        // A second-chance result is not final: its ack would be premature.
+        if (session != null && session.resultSent && !session.secondChance) {
             finish(player, session);
         }
     }
@@ -332,8 +409,20 @@ public final class CasinoManager {
             long now = player.serverLevel().getGameTime();
 
             if (!session.resultSent) {
-                if (now - session.startTick >= AUTO_SPIN_TICKS) {
+                if (now >= session.autoSpinAt) {
                     spin(player);
+                }
+                continue;
+            }
+
+            if (session.secondChance) {
+                // Waiting for the second SPIN after posidim.ogg. The chat line
+                // is shown only once the jingle has finished.
+                if (now >= session.bonusReadyAt) {
+                    announceSecondChance(player, session);
+                }
+                if (now >= session.autoSpinAt) {
+                    startBonusSpin(player, session);
                 }
                 continue;
             }
