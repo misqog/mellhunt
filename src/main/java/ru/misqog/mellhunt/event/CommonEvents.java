@@ -1,0 +1,458 @@
+package ru.misqog.mellhunt.event;
+
+import ru.misqog.mellhunt.MellstroyMod;
+import ru.misqog.mellhunt.casino.CasinoManager;
+import ru.misqog.mellhunt.config.MellstroyConfig;
+import ru.misqog.mellhunt.entity.MellstroyEntity;
+import ru.misqog.mellhunt.registry.ModEntities;
+import ru.misqog.mellhunt.registry.ModItems;
+import ru.misqog.mellhunt.spawn.MellstroyRespawnManager;
+import ru.misqog.mellhunt.world.MellstroyHouseManager;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.item.ItemTossEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.server.ServerLifecycleHooks;
+
+import java.util.List;
+
+/**
+ * Natural spawning (always far away, so there is room to run), the /mellstroy
+ * command and a small hint on login.
+ */
+@Mod.EventBusSubscriber(modid = MellstroyMod.MOD_ID)
+public final class CommonEvents {
+
+    private static int spawnTimer = 20 * 30;
+
+    /* ------------------------------------------------------------------ */
+    /*  Commands                                                          */
+    /* ------------------------------------------------------------------ */
+
+    @SubscribeEvent
+    public static void onRegisterCommands(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("mellstroy")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("here").executes(CommonEvents::spawnHere))
+                .then(Commands.literal("spawn").executes(CommonEvents::spawnAway))
+                .then(Commands.literal("remove").executes(CommonEvents::removeAll)));
+    }
+
+    private static int spawnHere(CommandContext<CommandSourceStack> context) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
+        ServerLevel level = player.serverLevel();
+
+        float yaw = player.getYRot() * (float) (Math.PI / 180.0D);
+        double x = player.getX() - Math.sin(yaw) * 4.0D;
+        double z = player.getZ() + Math.cos(yaw) * 4.0D;
+        int xFloor = (int) Math.floor(x);
+        int zFloor = (int) Math.floor(z);
+        BlockPos spawnPos = findSpawnPos(level, xFloor, zFloor, player.getBlockY());
+        if (spawnPos == null) {
+            source.sendFailure(Component.translatable("message.mellhunt.no_space"));
+            return 0;
+        }
+
+        MellstroyEntity mob = ModEntities.MELLSTROY.get().create(level);
+        if (mob == null) {
+            source.sendFailure(Component.translatable("message.mellhunt.no_space"));
+            return 0;
+        }
+
+        mob.moveTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D,
+                player.getYRot() + 180.0F, 0.0F);
+        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos),
+                MobSpawnType.COMMAND, null, null);
+        level.addFreshEntity(mob);
+        MellstroyRespawnManager.cancel();
+
+        source.sendSuccess(() -> Component.translatable("message.mellhunt.summoned")
+                .withStyle(ChatFormatting.DARK_RED), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int spawnAway(CommandContext<CommandSourceStack> context) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
+        ServerLevel level = player.serverLevel();
+
+        int min = MellstroyConfig.spawnMinDistance();
+        int max = Math.max(min + 1, MellstroyConfig.spawnMaxDistance());
+
+        if (!trySpawnAway(level, player, min, max)) {
+            source.sendFailure(Component.translatable("message.mellhunt.no_space"));
+            return 0;
+        }
+        MellstroyRespawnManager.cancel();
+
+        source.sendSuccess(() -> Component.translatable("message.mellhunt.summoned")
+                .withStyle(ChatFormatting.DARK_RED), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int removeAll(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        ServerLevel level = source.getLevel();
+        List<MellstroyEntity> mobs = level.getEntitiesOfClass(MellstroyEntity.class,
+                source.getEntity() != null
+                        ? source.getEntity().getBoundingBox().inflate(512.0D)
+                        : new net.minecraft.world.phys.AABB(-30000000, -1000, -30000000, 30000000, 4000, 30000000));
+
+        int count = 0;
+        for (MellstroyEntity mob : mobs) {
+            mob.discard();
+            count++;
+        }
+        MellstroyRespawnManager.cancel();
+
+        if (count == 0) {
+            source.sendFailure(Component.translatable("message.mellhunt.already_gone"));
+            return 0;
+        }
+
+        final int removed = count;
+        source.sendSuccess(() -> Component.translatable("message.mellhunt.removed", removed)
+                .withStyle(ChatFormatting.GRAY), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Natural spawning                                                  */
+    /* ------------------------------------------------------------------ */
+
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) {
+            return;
+        }
+
+        // The special respawn after the casino runs even if natural spawning
+        // is disabled. While it is pending, natural spawning is suppressed.
+        if (MellstroyRespawnManager.tick(server)) {
+            return;
+        }
+        if (!MellstroyConfig.naturalSpawn()) {
+            return;
+        }
+        if (MellstroyRespawnManager.isPending() || MellstroyHouseManager.isRushActive()) {
+            return;
+        }
+
+        if (spawnTimer > 0) {
+            spawnTimer--;
+            return;
+        }
+        spawnTimer = MellstroyConfig.spawnIntervalSeconds() * 20;
+
+        // There is only one Mellstroy, and a fresh copy deletes the old one.
+        // Never do that while he is busy with someone (chasing them, rushing
+        // them, searching for them): in multiplayer it would look like he
+        // instantly switched to the player near whom the new copy appeared.
+        if (MellstroyEntity.isAnyOccupied(server)) {
+            return;
+        }
+
+        List<ServerPlayer> players = server.getPlayerList().getPlayers();
+        if (players.isEmpty()) {
+            return;
+        }
+
+        ServerPlayer player = players.get(server.overworld().random.nextInt(players.size()));
+        ServerLevel level = player.serverLevel();
+
+        if (MellstroyConfig.spawnOnlyAtNight() && !level.isNight()) {
+            return;
+        }
+
+        // Never more than one of him per player, and only when he is far away.
+        // In the Nether, an old copy spawned on top of the bedrock roof can
+        // never reach the player and would block all future spawns, so it is
+        // discarded here.
+        boolean alreadyNear = false;
+        for (MellstroyEntity existing : level.getEntitiesOfClass(MellstroyEntity.class,
+                player.getBoundingBox().inflate(200.0D))) {
+            if (level.dimension() == Level.NETHER && existing.getY() > 126.0D) {
+                existing.discard();
+                continue;
+            }
+            alreadyNear = true;
+        }
+        if (alreadyNear) {
+            return;
+        }
+
+        if (level.random.nextFloat() > 0.6F) {
+            return;
+        }
+
+        int min = MellstroyConfig.spawnMinDistance();
+        int max = Math.max(min + 1, MellstroyConfig.spawnMaxDistance());
+        trySpawnAway(level, player, min, max);
+    }
+
+    /**
+     * Tries to spawn Mellstroy on the surface between {@code min} and
+     * {@code max} blocks away from the player. Never closer than the minimum,
+     * so the player always has room to run.
+     */
+    private static boolean trySpawnAway(ServerLevel level, ServerPlayer player, int min, int max) {
+        for (int attempt = 0; attempt < 48; attempt++) {
+            double angle = level.random.nextDouble() * Math.PI * 2.0D;
+            double distance = min + level.random.nextDouble() * (max - min);
+
+            int x = (int) Math.floor(player.getX() + Math.cos(angle) * distance);
+            int z = (int) Math.floor(player.getZ() + Math.sin(angle) * distance);
+
+            if (player.distanceToSqr(x + 0.5D, player.getY(), z + 0.5D) < (double) min * min) {
+                continue;
+            }
+
+            BlockPos surface = new BlockPos(x, level.getMinBuildHeight(), z);
+            if (!level.isLoaded(surface)) {
+                continue;
+            }
+
+            BlockPos pos = findSpawnPos(level, x, z, player.getBlockY());
+            if (pos == null) {
+                continue;
+            }
+            if (player.distanceToSqr(pos.getX() + 0.5D, player.getY(), pos.getZ() + 0.5D)
+                    < (double) min * min) {
+                // The neighbouring-column fallback must not spawn him too close.
+                continue;
+            }
+            BlockPos below = pos.below();
+
+            if (pos.getY() <= level.getMinBuildHeight() + 2) {
+                continue;
+            }
+
+            BlockState ground = level.getBlockState(below);
+            if (!ground.isSolidRender(level, below)) {
+                continue;
+            }
+            if (!level.getBlockState(pos).isAir() || !level.getBlockState(pos.above()).isAir()) {
+                continue;
+            }
+            if (!level.getFluidState(pos).isEmpty()) {
+                continue;
+            }
+
+            MellstroyEntity mob = ModEntities.MELLSTROY.get().create(level);
+            if (mob == null) {
+                return false;
+            }
+
+            mob.moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D,
+                    level.random.nextFloat() * 360.0F, 0.0F);
+            mob.finalizeSpawn(level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null, null);
+            level.addFreshEntity(mob);
+
+            player.displayClientMessage(
+                    Component.translatable("message.mellhunt.arrived")
+                            .withStyle(ChatFormatting.DARK_RED, ChatFormatting.ITALIC), true);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Finds a safe spawn position. In the Overworld the usual heightmap works,
+     * but in the Nether it points at the bedrock roof and the player would
+     * never meet him. There we scan around the player's own Y for a floor and,
+     * if that exact column is a lava sea or a wall, around the neighbouring
+     * columns as well.
+     */
+    private static BlockPos findSpawnPos(ServerLevel level, int x, int z, int referenceY) {
+        if (level.dimension() == Level.OVERWORLD) {
+            return new BlockPos(x,
+                    level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+        }
+
+        BlockPos direct = scanSpawnColumn(level, x, z, referenceY);
+        if (direct != null) {
+            return direct;
+        }
+
+        for (int radius = 1; radius <= 4; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                        continue;
+                    }
+                    BlockPos found = scanSpawnColumn(level, x + dx, z + dz, referenceY);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+            }
+        }
+        // Nothing safe nearby; let the caller reject the spawn.
+        return null;
+    }
+
+    private static BlockPos scanSpawnColumn(ServerLevel level, int x, int z, int referenceY) {
+        for (int radius = 0; radius <= 48; radius++) {
+            BlockPos down = new BlockPos(x, referenceY - radius, z);
+            if (isSafeSpawn(level, down)) {
+                return down;
+            }
+            if (radius > 0) {
+                BlockPos up = new BlockPos(x, referenceY + radius, z);
+                if (isSafeSpawn(level, up)) {
+                    return up;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean isSafeSpawn(ServerLevel level, BlockPos pos) {
+        if (pos.getY() <= level.getMinBuildHeight() + 2
+                || pos.getY() >= level.getMaxBuildHeight() - 2) {
+            return false;
+        }
+        // The Nether roof is at y = 127. Spawning there was the original bug:
+        // the heightmap returned the roof and he stood above the world where
+        // no player can ever reach him.
+        if (level.dimension() == Level.NETHER && pos.getY() >= 126) {
+            return false;
+        }
+        BlockPos below = pos.below();
+        BlockState ground = level.getBlockState(below);
+        return ground.isSolidRender(level, below)
+                && level.getBlockState(pos).isAir()
+                && level.getBlockState(pos.above()).isAir()
+                && level.getFluidState(pos).isEmpty();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  One Mellstroy in the whole world                                  */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Every Mellstroy that enters a level goes through here. A newly spawned
+     * one deletes all previous copies, and an old copy loaded from a chunk is
+     * dropped as soon as a newer one is active.
+     */
+    @SubscribeEvent
+    public static void onMellstroyJoin(EntityJoinLevelEvent event) {
+        if (!(event.getEntity() instanceof MellstroyEntity mob)
+                || !(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        if (MellstroyEntity.handleJoin(level, mob, event.loadedFromDisk())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        MellstroyEntity.resetActive();
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Misc                                                              */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Throwing a bottle of chekushka to Mellstroy buys the player a few
+     * minutes of peace: he catches the bottle, vanishes and only comes back
+     * on the usual far-away 3-7 minute timer.
+     *
+     * <p>Forge fires this after the stack has already been removed from the
+     * inventory, so cancelling it consumes the bottle without spawning an
+     * item entity on the ground.</p>
+     */
+    @SubscribeEvent
+    public static void onItemToss(ItemTossEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player) || player.isDeadOrDying()) {
+            return;
+        }
+        ItemStack stack = event.getEntity().getItem();
+        if (!stack.is(ModItems.CHEKUSHKA.get()) || CasinoManager.hasActiveSession()) {
+            return;
+        }
+
+        ServerLevel level = player.serverLevel();
+        MellstroyEntity mob = level.getEntitiesOfClass(MellstroyEntity.class,
+                        player.getBoundingBox().inflate(24.0D))
+                .stream().findFirst().orElse(null);
+        if (mob == null) {
+            // Nobody to give it to: it simply drops on the ground as usual.
+            return;
+        }
+
+        // He catches the bottle instead of it landing in the dirt. Only one is
+        // needed; return the rest if the whole stack was thrown away.
+        event.setCanceled(true);
+        int extra = stack.getCount() - 1;
+        if (extra > 0) {
+            player.getInventory().placeItemBackInInventory(
+                    new ItemStack(ModItems.CHEKUSHKA.get(), extra));
+        }
+
+        // No house alarm may summon a fresh copy right after he vanishes.
+        MellstroyHouseManager.stopAllRushes();
+
+        level.sendParticles(ParticleTypes.LARGE_SMOKE, mob.getX(), mob.getY() + 1.0D, mob.getZ(),
+                24, 0.4D, 0.9D, 0.4D, 0.02D);
+        level.playSound(null, mob.getX(), mob.getY(), mob.getZ(),
+                SoundEvents.ENDERMAN_TELEPORT, SoundSource.NEUTRAL, 1.0F, 0.8F);
+
+        mob.discard();
+        MellstroyRespawnManager.scheduleAfterCasino(level.getServer());
+
+        player.displayClientMessage(Component.translatable("message.mellhunt.chekushka.taken")
+                .withStyle(ChatFormatting.GOLD, ChatFormatting.ITALIC), true);
+    }
+
+    @SubscribeEvent
+    public static void onBuildCreativeTab(BuildCreativeModeTabContentsEvent event) {
+        if (event.getTabKey() == net.minecraft.world.item.CreativeModeTabs.SPAWN_EGGS) {
+            event.accept(ModItems.MELLSTROY_SPAWN_EGG);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        player.displayClientMessage(
+                Component.translatable("message.mellhunt.hint")
+                        .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), false);
+    }
+
+    private CommonEvents() {
+    }
+}

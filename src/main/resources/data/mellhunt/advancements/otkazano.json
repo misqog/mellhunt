@@ -1,0 +1,23 @@
+{
+  "parent": "mellhunt:root",
+  "display": {
+    "icon": {
+      "item": "minecraft:barrier"
+    },
+    "title": {
+      "translate": "advancements.mellhunt.otkazano.title"
+    },
+    "description": {
+      "translate": "advancements.mellhunt.otkazano.description"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "code_trigger": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

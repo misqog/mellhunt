@@ -1,0 +1,82 @@
+package ru.misqog.mellhunt.network;
+
+import ru.misqog.mellhunt.client.ClientPacketHandler;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
+
+/**
+ * Server -> client: the reels stopped on this result line.
+ *
+ * <p>{@code bonusRound} marks the second (izi_brigi) spin. {@code secondChance}
+ * marks a losing first spin that rolled the 1% and grants one more spin: the
+ * client plays posidim.ogg instead of the losing sound and re-enables SPIN.</p>
+ */
+public class CasinoResultPacket {
+
+    private final boolean won;
+    private final boolean bonusRound;
+    private final boolean secondChance;
+    private final int[] line;
+
+    public CasinoResultPacket(boolean won, boolean bonusRound, boolean secondChance, int[] line) {
+        if (line == null || line.length != 3) {
+            throw new IllegalArgumentException("A casino result line needs exactly 3 symbols");
+        }
+        this.won = won;
+        this.bonusRound = bonusRound;
+        this.secondChance = secondChance;
+        this.line = line.clone();
+    }
+
+    public boolean isWon() {
+        return this.won;
+    }
+
+    public boolean isBonusRound() {
+        return this.bonusRound;
+    }
+
+    public boolean isSecondChance() {
+        return this.secondChance;
+    }
+
+    public int[] getLine() {
+        return this.line.clone();
+    }
+
+    public static void encode(CasinoResultPacket packet, FriendlyByteBuf buffer) {
+        buffer.writeBoolean(packet.won);
+        buffer.writeBoolean(packet.bonusRound);
+        buffer.writeBoolean(packet.secondChance);
+        for (int symbol : packet.line) {
+            buffer.writeByte(symbol);
+        }
+    }
+
+    public static CasinoResultPacket decode(FriendlyByteBuf buffer) {
+        boolean won = buffer.readBoolean();
+        boolean bonusRound = buffer.readBoolean();
+        boolean secondChance = buffer.readBoolean();
+        int[] line = {
+                buffer.readUnsignedByte(),
+                buffer.readUnsignedByte(),
+                buffer.readUnsignedByte()
+        };
+        return new CasinoResultPacket(won, bonusRound, secondChance, line);
+    }
+
+    public static void handle(CasinoResultPacket packet, Supplier<NetworkEvent.Context> context) {
+        boolean won = packet.won;
+        boolean bonusRound = packet.bonusRound;
+        boolean secondChance = packet.secondChance;
+        int[] line = packet.line;
+        context.get().enqueueWork(() ->
+                DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
+                        ClientPacketHandler.showResult(won, line, bonusRound, secondChance)));
+        context.get().setPacketHandled(true);
+    }
+}

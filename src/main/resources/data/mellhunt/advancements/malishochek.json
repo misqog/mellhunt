@@ -1,0 +1,28 @@
+{
+  "parent": "mellhunt:root",
+  "display": {
+    "icon": {
+      "item": "mellhunt:fat_cat_spawn_egg"
+    },
+    "title": {
+      "translate": "advancements.mellhunt.malishochek.title"
+    },
+    "description": {
+      "translate": "advancements.mellhunt.malishochek.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "tamed_cat": {
+      "trigger": "minecraft:tame_animal",
+      "conditions": {
+        "entity": {
+          "type": "mellhunt:fat_cat"
+        }
+      }
+    }
+  }
+}

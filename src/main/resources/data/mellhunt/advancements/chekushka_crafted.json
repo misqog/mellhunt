@@ -1,0 +1,27 @@
+{
+  "display": {
+    "icon": {
+      "item": "mellhunt:chekushka"
+    },
+    "title": {
+      "translate": "advancements.mellhunt.chekushka.title"
+    },
+    "description": {
+      "translate": "advancements.mellhunt.chekushka.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false,
+    "background": "minecraft:textures/gui/advancements/backgrounds/stone.png"
+  },
+  "criteria": {
+    "crafted_chekushka": {
+      "trigger": "minecraft:recipe_crafted",
+      "conditions": {
+        "recipe_id": "mellhunt:chekushka",
+        "ingredients": []
+      }
+    }
+  }
+}

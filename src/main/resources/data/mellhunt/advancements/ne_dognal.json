@@ -1,0 +1,23 @@
+{
+  "parent": "mellhunt:root",
+  "display": {
+    "icon": {
+      "item": "minecraft:feather"
+    },
+    "title": {
+      "translate": "advancements.mellhunt.ne_dognal.title"
+    },
+    "description": {
+      "translate": "advancements.mellhunt.ne_dognal.description"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "code_trigger": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

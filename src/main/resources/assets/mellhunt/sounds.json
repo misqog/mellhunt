@@ -1,0 +1,96 @@
+{
+  "mellhunt.uvidel": {
+    "subtitle": "subtitles.mellhunt.uvidel",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/uvidel", "attenuation_distance": 64 }
+    ]
+  },
+  "mellhunt.ne_dognal": {
+    "subtitle": "subtitles.mellhunt.ne_dognal",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/ne_dognal", "attenuation_distance": 64 }
+    ]
+  },
+  "mellhunt.kill": {
+    "subtitle": "subtitles.mellhunt.kill",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/kill", "attenuation_distance": 64 }
+    ]
+  },
+  "mellhunt.win_casino": {
+    "subtitle": "subtitles.mellhunt.win_casino",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/win_casino" }
+    ]
+  },
+  "mellhunt.lose_casino": {
+    "subtitle": "subtitles.mellhunt.lose_casino",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/lose_casino" }
+    ]
+  },
+  "mellhunt.prokrutka": {
+    "subtitle": "subtitles.mellhunt.prokrutka",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/prokrutka" }
+    ]
+  },
+  "mellhunt.izi_brigi": {
+    "subtitle": "subtitles.mellhunt.izi_brigi",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/izi_brigi" }
+    ]
+  },
+  "mellhunt.posidim": {
+    "subtitle": "subtitles.mellhunt.posidim",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/posidim" }
+    ]
+  },
+  "mellhunt.artur": {
+    "sounds": [
+      { "name": "mellhunt:mellstroy/artur", "attenuation_distance": 64 }
+    ]
+  },
+  "mellhunt.seks": {
+    "sounds": [
+      { "name": "mellhunt:mellstroy/seks", "attenuation_distance": 96 }
+    ]
+  },
+  "mellhunt.malishochek": {
+    "subtitle": "subtitles.mellhunt.malishochek",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/malishochek", "attenuation_distance": 64 }
+    ]
+  },
+  "mellhunt.phrase1": {
+    "subtitle": "subtitles.mellhunt.phrase",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/random1", "attenuation_distance": 48 }
+    ]
+  },
+  "mellhunt.phrase2": {
+    "subtitle": "subtitles.mellhunt.phrase",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/random2", "attenuation_distance": 48 }
+    ]
+  },
+  "mellhunt.phrase3": {
+    "subtitle": "subtitles.mellhunt.phrase",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/random3", "attenuation_distance": 48 }
+    ]
+  },
+  "mellhunt.phrase4": {
+    "subtitle": "subtitles.mellhunt.phrase",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/random4", "attenuation_distance": 48 }
+    ]
+  },
+  "mellhunt.phrase5": {
+    "subtitle": "subtitles.mellhunt.phrase",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/random5", "attenuation_distance": 48 }
+    ]
+  }
+}
