@@ -1,0 +1,23 @@
+{
+  "display": {
+    "icon": {
+      "item": "mellstroy:mellstroy_spawn_egg"
+    },
+    "title": {
+      "translate": "advancements.mellstroy.root.title"
+    },
+    "description": {
+      "translate": "advancements.mellstroy.root.description"
+    },
+    "frame": "task",
+    "show_toast": false,
+    "announce_to_chat": false,
+    "hidden": false,
+    "background": "minecraft:textures/gui/advancements/backgrounds/nether.png"
+  },
+  "criteria": {
+    "tick": {
+      "trigger": "minecraft:tick"
+    }
+  }
+}

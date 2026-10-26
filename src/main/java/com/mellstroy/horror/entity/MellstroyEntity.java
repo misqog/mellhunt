@@ -1,5 +1,6 @@
 package com.mellstroy.horror.entity;
 
+import com.mellstroy.horror.advancement.ModAdvancements;
 import com.mellstroy.horror.config.MellstroyConfig;
 import com.mellstroy.horror.network.ModNetwork;
 import com.mellstroy.horror.registry.ModSounds;
@@ -1097,6 +1098,7 @@ public class MellstroyEntity extends Monster {
                     Component.translatable("message.mellstroy.hidden")
                             .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC),
                     true);
+            ModAdvancements.onEscaped(serverPlayer);
         }
     }
 

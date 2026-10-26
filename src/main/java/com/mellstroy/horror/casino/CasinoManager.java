@@ -1,6 +1,7 @@
 package com.mellstroy.horror.casino;
 
 import com.mellstroy.horror.MellstroyMod;
+import com.mellstroy.horror.advancement.ModAdvancements;
 import com.mellstroy.horror.config.MellstroyConfig;
 import com.mellstroy.horror.entity.MellstroyEntity;
 import com.mellstroy.horror.network.ModNetwork;
@@ -361,6 +362,7 @@ public final class CasinoManager {
             }
 
             SESSIONS.remove(player.getUUID());
+            ModAdvancements.onCasinoWin(player);
             return;
         }
 
@@ -380,6 +382,8 @@ public final class CasinoManager {
         player.displayClientMessage(
                 Component.translatable("message.mellstroy.lose")
                         .withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD), false);
+
+        ModAdvancements.onCasinoLoss(player);
 
         if (mob != null) {
             player.hurt(player.damageSources().mobAttack(mob), 4096.0F);
