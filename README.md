@@ -1,11 +1,11 @@
-# Mellstroy Horror (Forge 1.20.1)
+# MellHUNT (Forge 1.20.1)
 
 Хоррор-мод: по миру ходит **Меллстрой** — обычный моб с моделью игрока и скином,
 сделанным из его фото. Его нельзя убить, он не горит, не тонет и не исчезает.
 
 ## Что внутри
 
-- **Моб `mellstroy:mellstroy`** — человекоподобная модель (как у игрока), скин с лицом,
+- **Моб `mellhunt:mellstroy`** — человекоподобная модель (как у игрока), скин с лицом,
   футболкой D&G, часами и тёмными джинсами. Никакого плоского билборда.
 - **Сам спавнится** — в любой момент времени, но всегда в **45–75 блоках** от игрока,
   чтобы у тебя всегда был шанс убежать.
@@ -76,7 +76,7 @@
 ## Достижения
 
 Все новые достижения собраны в отдельной вкладке **«Меллстрой»** (корневое
-достижение `mellstroy:root`).
+достижение `mellhunt:root`).
 
 | Достижение | Как получить |
 | --- | --- |
@@ -90,7 +90,7 @@
 
 ## Чекушка
 
-Предмет `mellstroy:chekushka` — объёмная бутылка с синей этикеткой «ЧЕКУШКА».
+Предмет `mellhunt:chekushka` — объёмная бутылка с синей этикеткой «ЧЕКУШКА».
 Лежит в отдельной вкладке **«Меллстрой»** в креативе.
 
 - **Крафт (3×3):** алмаз — золотой блок — алмаз / слеза гаста — звезда Нижнего мира —
@@ -108,7 +108,7 @@
 
 ## Толстый кот
 
-Сущность `mellstroy:fat_cat` — объёмная 3D-модель толстого кота-калико
+Сущность `mellhunt:fat_cat` — объёмная 3D-модель толстого кота-калико
 (кремовая шерсть, чёрное пятно на морде, рыжее на спине, большие глаза и
 короткие лапки). Это не спрайт и не билборд: тело собрано из нескольких
 объёмов, у кота есть хвост, уши и анимация ходьбы.
@@ -125,7 +125,7 @@
 - **Первый взгляд:** когда игрок впервые реально видит кота из дома (близко,
   в поле зрения и без преград), ему **один раз** проигрывается `malishochek.ogg`.
 - Естественного спавна в мире нет: кот появляется из яйца, в доме Меллстроя
-  (25%) или командой `/summon mellstroy:fat_cat`.
+  (25%) или командой `/summon mellhunt:fat_cat`.
 
 ## Команды
 
@@ -140,10 +140,10 @@
 
 ## Конфиг
 
-`config/mellstroy-common.toml`:
+`config/mellhunt-common.toml`:
 
 ```toml
-[mellstroy]
+[mellhunt]
     naturalSpawn = true             # спавнить автоматически
     spawnIntervalSeconds = 60       # как часто пытаться спавнить
     spawnMinDistance = 45           # минимальная дистанция спавна
@@ -164,14 +164,14 @@ $env:JAVA_HOME = "путь\к\jdk-17"
 .\gradlew.bat build
 ```
 
-Готовый jar: `build/libs/mellstroy-0.1.jar` → кинуть в `.minecraft/mods`
+Готовый jar: `build/libs/mellhunt-0.3.jar` → кинуть в `.minecraft/mods`
 (нужен Forge 47.x для 1.20.1).
 
 ## Ресурсы
 
-- Скин: `src/main/resources/assets/mellstroy/textures/entity/mellstroy.png`
+- Скин: `src/main/resources/assets/mellhunt/textures/entity/mellstroy.png`
   (256×256, HD-развёртка стандартного скина 64×64).
-- Текстура кота: `src/main/resources/assets/mellstroy/textures/entity/fat_cat.png`
+- Текстура кота: `src/main/resources/assets/mellhunt/textures/entity/fat_cat.png`
   (256×256, атлас для объёмной модели).
-- Звуки: `src/main/resources/assets/mellstroy/sounds/mellstroy/*.ogg` (моно, 48 кГц).
-- Описания звуков: `src/main/resources/assets/mellstroy/sounds.json`.
+- Звуки: `src/main/resources/assets/mellhunt/sounds/mellstroy/*.ogg` (моно, 48 кГц).
+- Описания звуков: `src/main/resources/assets/mellhunt/sounds.json`.
