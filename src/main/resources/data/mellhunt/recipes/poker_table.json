@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "WWW",
+    "PCP",
+    "P P"
+  ],
+  "key": {
+    "W": {
+      "item": "minecraft:green_wool"
+    },
+    "P": {
+      "item": "minecraft:dark_oak_planks"
+    },
+    "C": {
+      "item": "minecraft:paper"
+    }
+  },
+  "result": {
+    "item": "mellhunt:poker_table",
+    "count": 1
+  }
+}

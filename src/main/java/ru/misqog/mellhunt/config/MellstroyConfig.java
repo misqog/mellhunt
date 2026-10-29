@@ -62,6 +62,10 @@ public final class MellstroyConfig {
         return get(() -> COMMON.casinoWinChanceMax.get(), 75);
     }
 
+    public static int slotMachineWinChance() {
+        return get(() -> COMMON.slotMachineWinChance.get(), 35);
+    }
+
     /**
      * The jackpot chance is rolled again every time the casino opens. The
      * configured range is inclusive.
@@ -99,6 +103,7 @@ public final class MellstroyConfig {
         public final ForgeConfigSpec.BooleanValue casinoEnabled;
         public final ForgeConfigSpec.IntValue casinoWinChanceMin;
         public final ForgeConfigSpec.IntValue casinoWinChanceMax;
+        public final ForgeConfigSpec.IntValue slotMachineWinChance;
 
         private Common(ForgeConfigSpec.Builder builder) {
             builder.push("mellhunt");
@@ -147,6 +152,11 @@ public final class MellstroyConfig {
             this.casinoWinChanceMax = builder
                     .comment("Maximum jackpot chance in percent. The range is inclusive.")
                     .defineInRange("casinoWinChanceMax", 75, 1, 99);
+
+            this.slotMachineWinChance = builder
+                    .comment("Win chance of the playable slot machine block, in percent.",
+                            "The machine takes one gold ingot per spin (free in creative).")
+                    .defineInRange("slotMachineWinChance", 35, 1, 99);
 
             builder.pop();
         }

@@ -1,0 +1,64 @@
+{
+  "variants": {
+    "rotation=0": {
+      "model": "mellhunt:block/laptop"
+    },
+    "rotation=1": {
+      "model": "mellhunt:block/laptop_neg_22_5"
+    },
+    "rotation=2": {
+      "model": "mellhunt:block/laptop_neg_45"
+    },
+    "rotation=3": {
+      "model": "mellhunt:block/laptop_22_5",
+      "y": 90
+    },
+    "rotation=4": {
+      "model": "mellhunt:block/laptop",
+      "y": 90
+    },
+    "rotation=5": {
+      "model": "mellhunt:block/laptop_neg_22_5",
+      "y": 90
+    },
+    "rotation=6": {
+      "model": "mellhunt:block/laptop_neg_45",
+      "y": 90
+    },
+    "rotation=7": {
+      "model": "mellhunt:block/laptop_22_5",
+      "y": 180
+    },
+    "rotation=8": {
+      "model": "mellhunt:block/laptop",
+      "y": 180
+    },
+    "rotation=9": {
+      "model": "mellhunt:block/laptop_neg_22_5",
+      "y": 180
+    },
+    "rotation=10": {
+      "model": "mellhunt:block/laptop_neg_45",
+      "y": 180
+    },
+    "rotation=11": {
+      "model": "mellhunt:block/laptop_22_5",
+      "y": 270
+    },
+    "rotation=12": {
+      "model": "mellhunt:block/laptop",
+      "y": 270
+    },
+    "rotation=13": {
+      "model": "mellhunt:block/laptop_neg_22_5",
+      "y": 270
+    },
+    "rotation=14": {
+      "model": "mellhunt:block/laptop_neg_45",
+      "y": 270
+    },
+    "rotation=15": {
+      "model": "mellhunt:block/laptop_22_5"
+    }
+  }
+}

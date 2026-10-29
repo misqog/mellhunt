@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "mellhunt:block/mellstroy_sign_icon"
+  }
+}

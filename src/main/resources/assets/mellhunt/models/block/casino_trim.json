@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "mellhunt:block/casino_trim",
+    "end": "mellhunt:block/casino_trim_top"
+  }
+}

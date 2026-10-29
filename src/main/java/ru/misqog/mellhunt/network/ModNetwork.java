@@ -1,12 +1,15 @@
 package ru.misqog.mellhunt.network;
 
 import ru.misqog.mellhunt.MellstroyMod;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
@@ -14,7 +17,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetwork {
 
-    private static final String PROTOCOL = "2";
+    private static final String PROTOCOL = "3";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MellstroyMod.MOD_ID, "main"),
@@ -52,6 +55,21 @@ public final class ModNetwork {
                 .decoder(PlayerSoundPacket::decode)
                 .consumerMainThread(PlayerSoundPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenSlotMachinePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenSlotMachinePacket::encode)
+                .decoder(OpenSlotMachinePacket::decode)
+                .consumerMainThread(OpenSlotMachinePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(SlotMachineSpinPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SlotMachineSpinPacket::encode)
+                .decoder(SlotMachineSpinPacket::decode)
+                .consumerMainThread(SlotMachineSpinPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(SlotMachineResultPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(SlotMachineResultPacket::encode)
+                .decoder(SlotMachineResultPacket::decode)
+                .consumerMainThread(SlotMachineResultPacket::handle)
+                .add();
     }
 
     public static void sendOpenCasino(ServerPlayer player, int winChance) {
@@ -70,6 +88,23 @@ public final class ModNetwork {
 
     public static void sendAck() {
         CHANNEL.send(PacketDistributor.SERVER.noArg(), new CasinoAckPacket());
+    }
+
+    public static void sendOpenSlotMachine(ServerPlayer player, BlockPos pos, int winChance) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new OpenSlotMachinePacket(pos, winChance));
+    }
+
+    public static void sendSlotSpin(BlockPos pos) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new SlotMachineSpinPacket(pos));
+    }
+
+    public static void sendSlotResult(ServerPlayer player, boolean won, int[] line, ItemStack prize) {
+        ResourceLocation prizeId = prize.isEmpty()
+                ? null
+                : BuiltInRegistries.ITEM.getKey(prize.getItem());
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new SlotMachineResultPacket(won, line, prizeId, prize.getCount()));
     }
 
     /**

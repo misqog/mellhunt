@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "side": "mellhunt:block/casino_wall_neon",
+    "top": "mellhunt:block/casino_wall_neon_top",
+    "bottom": "mellhunt:block/casino_wall_neon_top"
+  }
+}

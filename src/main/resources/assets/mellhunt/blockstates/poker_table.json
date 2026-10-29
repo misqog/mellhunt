@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mellhunt:block/poker_table"
+    },
+    "facing=east": {
+      "model": "mellhunt:block/poker_table",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "mellhunt:block/poker_table",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "mellhunt:block/poker_table",
+      "y": 270
+    }
+  }
+}

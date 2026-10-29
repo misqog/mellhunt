@@ -15,6 +15,7 @@ public final class ClientSetup {
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ModEntities.MELLSTROY.get(), MellstroyRenderer::new);
         event.registerEntityRenderer(ModEntities.FAT_CAT.get(), FatCatRenderer::new);
+        event.registerEntityRenderer(ModEntities.CHAIR_SEAT.get(), ChairSeatRenderer::new);
     }
 
     @SubscribeEvent

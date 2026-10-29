@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mellhunt:block/casino_chair"
+    },
+    "facing=east": {
+      "model": "mellhunt:block/casino_chair",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "mellhunt:block/casino_chair",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "mellhunt:block/casino_chair",
+      "y": 270
+    }
+  }
+}

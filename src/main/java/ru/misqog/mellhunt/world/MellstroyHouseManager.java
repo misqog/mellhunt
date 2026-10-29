@@ -20,6 +20,7 @@ import net.minecraft.server.level.TicketType;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
@@ -89,16 +90,19 @@ public final class MellstroyHouseManager {
         List<ServerPlayer> players = level.players();
         if (players.isEmpty()) return;
 
-        for (BlockPos house : data.houses) {
-            if (data.seenHouses.contains(key(house))) continue;
-            for (ServerPlayer player : players) {
-                if (canSeeHouse(level, player, house)) {
-                    data.seenHouses.add(key(house));
-                    data.setDirty();
-                    // Played in the player's ears: a positional sound would be
-                    // inaudible at the distance the house is spotted from.
-                    ModNetwork.sendPlayerSound(player, SoundEvents.WARDEN_ROAR, 1.1F, 0.65F);
-                    break;
+        boolean peaceful = level.getDifficulty() == Difficulty.PEACEFUL;
+        if (!peaceful) {
+            for (BlockPos house : data.houses) {
+                if (data.seenHouses.contains(key(house))) continue;
+                for (ServerPlayer player : players) {
+                    if (canSeeHouse(level, player, house)) {
+                        data.seenHouses.add(key(house));
+                        data.setDirty();
+                        // Played in the player's ears: a positional sound would be
+                        // inaudible at the distance the house is spotted from.
+                        ModNetwork.sendPlayerSound(player, SoundEvents.WARDEN_ROAR, 1.1F, 0.65F);
+                        break;
+                    }
                 }
             }
         }
@@ -369,6 +373,7 @@ public final class MellstroyHouseManager {
     @SubscribeEvent
     public static void onHouseBlockBroken(BlockEvent.BreakEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || level != level.getServer().overworld()) return;
+        if (level.getDifficulty() == Difficulty.PEACEFUL) return;
         HouseData data = data(level);
         BlockPos broken = event.getPos();
         BlockPos house = containingHouse(data, broken);
@@ -398,6 +403,7 @@ public final class MellstroyHouseManager {
     public static void onReadHouseLectern(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getLevel() instanceof ServerLevel level) || level != level.getServer().overworld()
                 || !(event.getEntity() instanceof ServerPlayer player)) return;
+        if (level.getDifficulty() == Difficulty.PEACEFUL) return;
         BlockPos pos = event.getPos();
         if (!level.getBlockState(pos).is(Blocks.LECTERN)
                 || !isHousePosition(data(level), pos)
@@ -437,6 +443,9 @@ public final class MellstroyHouseManager {
     }
 
     private static boolean startHouseRush(ServerLevel level, BlockPos house, ServerPlayer breaker) {
+        if (level.getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
         // The house rush is more important than the casino cooldown: he must
         // come even if the 3-7 minute respawn timer is still pending.
         MellstroyRespawnManager.cancel();
@@ -456,6 +465,9 @@ public final class MellstroyHouseManager {
 
     @Nullable
     private static MellstroyEntity spawnRushMob(ServerLevel level, BlockPos house, ServerPlayer breaker) {
+        if (level.getDifficulty() == Difficulty.PEACEFUL) {
+            return null;
+        }
         BlockPos spawn = findRushSpawn(level, house, breaker);
         if (spawn == null) return null;
 
@@ -565,6 +577,17 @@ public final class MellstroyHouseManager {
         }
 
         private void tick() {
+            if (level.getDifficulty() == Difficulty.PEACEFUL) {
+                // Do not cancel the rush: the player may switch back to
+                // Easy/Normal and expect Mellstroy to keep running to the
+                // house. Just pause the alarm completely while Peaceful:
+                // no messages, no forced chunks, no re-summoning. The next
+                // non-Peaceful tick resumes the same rush.
+                this.missingTicks = 0;
+                this.closeTicks = 0;
+                releaseTickingChunk();
+                return;
+            }
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(playerId);
             if (player == null || player.serverLevel() != level || !player.isAlive()) {
                 stop();

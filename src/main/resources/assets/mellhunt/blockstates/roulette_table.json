@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mellhunt:block/roulette_table"
+    },
+    "facing=east": {
+      "model": "mellhunt:block/roulette_table",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "mellhunt:block/roulette_table",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "mellhunt:block/roulette_table",
+      "y": 270
+    }
+  }
+}

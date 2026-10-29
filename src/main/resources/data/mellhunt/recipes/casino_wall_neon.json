@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "BBB",
+    "BGB",
+    "BMB"
+  ],
+  "key": {
+    "B": {
+      "item": "minecraft:polished_blackstone"
+    },
+    "G": {
+      "item": "minecraft:glowstone_dust"
+    },
+    "M": {
+      "item": "minecraft:magenta_dye"
+    }
+  },
+  "result": {
+    "item": "mellhunt:casino_wall_neon",
+    "count": 4
+  }
+}

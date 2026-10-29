@@ -1,6 +1,7 @@
 package ru.misqog.mellhunt.registry;
 
 import ru.misqog.mellhunt.MellstroyMod;
+import ru.misqog.mellhunt.entity.ChairSeatEntity;
 import ru.misqog.mellhunt.entity.FatCatEntity;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
 import net.minecraft.resources.ResourceLocation;
@@ -28,6 +29,14 @@ public final class ModEntities {
                     .sized(1.0F, 1.05F)
                     .clientTrackingRange(10)
                     .build(new ResourceLocation(MellstroyMod.MOD_ID, "fat_cat").toString()));
+
+    /** The invisible seat used by casino chairs. Never spawned by the player. */
+    public static final RegistryObject<EntityType<ChairSeatEntity>> CHAIR_SEAT = ENTITY_TYPES.register("chair_seat",
+            () -> EntityType.Builder.<ChairSeatEntity>of(ChairSeatEntity::new, MobCategory.MISC)
+                    .sized(0.1F, 0.1F)
+                    .clientTrackingRange(4)
+                    .updateInterval(20)
+                    .build(new ResourceLocation(MellstroyMod.MOD_ID, "chair_seat").toString()));
 
     private ModEntities() {
     }

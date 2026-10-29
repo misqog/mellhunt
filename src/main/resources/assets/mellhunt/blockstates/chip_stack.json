@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "mellhunt:block/chip_stack"
+    }
+  }
+}

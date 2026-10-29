@@ -23,6 +23,27 @@ public final class ModCreativeTabs {
                     .icon(() -> new ItemStack(ModItems.CHEKUSHKA.get()))
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.CHEKUSHKA.get());
+                        output.accept(ModItems.LAPTOP.get());
+
+                        // Floors
+                        output.accept(ModItems.CASINO_TILE.get());
+                        output.accept(ModItems.CASINO_FLOOR_GOLD.get());
+                        output.accept(ModItems.CASINO_CARPET.get());
+
+                        // Walls
+                        output.accept(ModItems.CASINO_WALL_WOOD.get());
+                        output.accept(ModItems.CASINO_WALLPAPER.get());
+                        output.accept(ModItems.CASINO_WALL_NEON.get());
+                        output.accept(ModItems.CASINO_TRIM.get());
+
+                        // Furniture
+                        output.accept(ModItems.SLOT_MACHINE.get());
+                        output.accept(ModItems.ROULETTE_TABLE.get());
+                        output.accept(ModItems.POKER_TABLE.get());
+                        output.accept(ModItems.CASINO_CHAIR.get());
+                        output.accept(ModItems.CHIP_STACK.get());
+                        output.accept(ModItems.MELLSTROY_SIGN.get());
+
                         output.accept(ModItems.FAT_CAT_SPAWN_EGG.get());
                         output.accept(ModItems.MELLSTROY_SPAWN_EGG.get());
                     })

@@ -21,6 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -189,6 +190,10 @@ public final class CommonEvents {
         ServerPlayer player = players.get(server.overworld().random.nextInt(players.size()));
         ServerLevel level = player.serverLevel();
 
+        if (level.getDifficulty() == Difficulty.PEACEFUL) {
+            return;
+        }
+
         if (MellstroyConfig.spawnOnlyAtNight() && !level.isNight()) {
             return;
         }
@@ -225,6 +230,9 @@ public final class CommonEvents {
      * so the player always has room to run.
      */
     private static boolean trySpawnAway(ServerLevel level, ServerPlayer player, int min, int max) {
+        if (level.getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
         for (int attempt = 0; attempt < 48; attempt++) {
             double angle = level.random.nextDouble() * Math.PI * 2.0D;
             double distance = min + level.random.nextDouble() * (max - min);
@@ -446,6 +454,9 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        if (player.serverLevel().getDifficulty() == Difficulty.PEACEFUL) {
             return;
         }
         player.displayClientMessage(

@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "QB",
+    "BQ"
+  ],
+  "key": {
+    "Q": {
+      "item": "minecraft:quartz_block"
+    },
+    "B": {
+      "item": "minecraft:polished_blackstone"
+    }
+  },
+  "result": {
+    "item": "mellhunt:casino_tile",
+    "count": 4
+  }
+}

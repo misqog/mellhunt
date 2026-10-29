@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -20,6 +21,12 @@ public final class MellstroySpawner {
 
     public static boolean trySpawn(ServerLevel level, ServerPlayer anchor, int min, int max,
                                    boolean farFromAllPlayers, boolean announce, int graceTicks) {
+        // On Peaceful the world has no hostile mobs, and Mellstroy must not
+        // quietly appear just to wander after the player.
+        if (level.getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
+
         int minimum = Math.max(1, min);
         int maximum = Math.max(minimum + 1, max);
 

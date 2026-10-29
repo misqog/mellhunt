@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mellhunt:block/slot_machine"
+    },
+    "facing=east": {
+      "model": "mellhunt:block/slot_machine",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "mellhunt:block/slot_machine",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "mellhunt:block/slot_machine",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "mellhunt:casino_tile",
+    "mellhunt:casino_floor_gold",
+    "mellhunt:casino_wall_neon",
+    "mellhunt:casino_trim",
+    "mellhunt:slot_machine",
+    "mellhunt:mellstroy_sign"
+  ]
+}

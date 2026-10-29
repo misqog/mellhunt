@@ -19,6 +19,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -174,6 +175,8 @@ public class MellstroyEntity extends Monster {
     /** How long he has been chasing the current target without reaching them. */
     private int chaseTicks;
     private boolean desperate;
+    /** True while the world is on Peaceful: he ignores every player. */
+    private boolean peacefulMode;
     @Nullable
     private UUID chaseTargetId;
     /**
@@ -240,10 +243,31 @@ public class MellstroyEntity extends Monster {
                 // He does not need to touch you to grab you.
                 return 4.0D;
             }
+
+            @Override
+            public boolean canUse() {
+                return !MellstroyEntity.this.isPeacefulWorld() && super.canUse();
+            }
+
+            @Override
+            public boolean canContinueToUse() {
+                return !MellstroyEntity.this.isPeacefulWorld() && super.canContinueToUse();
+            }
         });
         this.goalSelector.addGoal(2, new OpenDoorGoal(this, true));
         this.goalSelector.addGoal(4, new WaterAvoidingRandomStrollGoal(this, 0.6D));
-        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 64.0F, 1.0F));
+        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 64.0F, 1.0F) {
+            @Override
+            public boolean canUse() {
+                // On Peaceful he must not even turn his head towards a player.
+                return !MellstroyEntity.this.isPeacefulWorld() && super.canUse();
+            }
+
+            @Override
+            public boolean canContinueToUse() {
+                return !MellstroyEntity.this.isPeacefulWorld() && super.canContinueToUse();
+            }
+        });
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
     }
 
@@ -283,6 +307,15 @@ public class MellstroyEntity extends Monster {
             this.setSeeingPlayerId(-1);
             return;
         }
+
+        // Peaceful: he is just a harmless wanderer. No target, no fear, no
+        // chase sounds, no house rush - exactly like a creative player, but
+        // for everyone in the world.
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL) {
+            this.tickPeaceful();
+            return;
+        }
+        this.peacefulMode = false;
 
         if (this.houseRushTicks > 0 && --this.houseRushTicks == 0) {
             this.setMovementSpeed(BASE_MOVEMENT_SPEED);
@@ -1029,6 +1062,9 @@ public class MellstroyEntity extends Monster {
     }
 
     private boolean canAcquire(Player player) {
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
         if (this.hideCooldown > 0) {
             // A successful hide really lasts thirty seconds: he searches the
             // last known position instead of magically spotting you again.
@@ -1123,7 +1159,8 @@ public class MellstroyEntity extends Monster {
     }
 
     private void applyFear(Player player) {
-        if (player.isCreative() || player.isSpectator()) {
+        if (player.isCreative() || player.isSpectator()
+                || player.level().getDifficulty() == Difficulty.PEACEFUL) {
             return;
         }
         double distSqr = player.distanceToSqr(this);
@@ -1133,6 +1170,62 @@ public class MellstroyEntity extends Monster {
         if (distSqr < 12.0D * 12.0D) {
             player.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 80, 0, false, false, false));
         }
+    }
+
+    /**
+     * True while the world is on Peaceful. All horror behaviour checks this;
+     * he still exists and wanders around, but he is blind to every player.
+     */
+    public boolean isPeacefulWorld() {
+        return this.level().getDifficulty() == Difficulty.PEACEFUL;
+    }
+
+    /**
+     * Once per tick on Peaceful: forget the target and every chase/rush state,
+     * stop the current path and keep the "hunting" flag off so the client does
+     * not draw the red vignette or shake the camera.
+     */
+    private void tickPeaceful() {
+        if (!this.peacefulMode) {
+            this.peacefulMode = true;
+            this.getNavigation().stop();
+            this.getMoveControl().setWantedPosition(this.getX(), this.getY(), this.getZ(), 0.0D);
+            this.setMovementSpeed(BASE_MOVEMENT_SPEED);
+            this.setDeltaMovement(0.0D, this.getDeltaMovement().y, 0.0D);
+            this.setXxa(0.0F);
+            this.setYya(0.0F);
+            this.setZza(0.0F);
+            this.houseRushTicks = 0;
+            this.rushTargetId = null;
+            this.desperate = false;
+            this.seksRushPending = false;
+            this.chaseTicks = 0;
+            this.chaseTargetId = null;
+            this.searchTicks = 0;
+            this.lostTicks = 0;
+            this.hideVisibleTicks = 0;
+            this.escapeTicks = 0;
+            this.lostSoundTick = -1;
+            this.hideAnchor = null;
+            this.graceTicks = 0;
+            // Do not keep staring at the player he was chasing a moment ago.
+            this.getLookControl().setLookAt(this.getX(), this.getY() + 1.6D, this.getZ() + 0.01D);
+        }
+
+        this.setTarget(null);
+        this.setSeeingPlayerId(-1);
+        if (this.entityData.get(DATA_HUNTING)) {
+            this.entityData.set(DATA_HUNTING, false);
+        }
+    }
+
+    @Override
+    public void setTarget(@Nullable LivingEntity target) {
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL && target instanceof Player) {
+            super.setTarget(null);
+            return;
+        }
+        super.setTarget(target);
     }
 
     /**
@@ -1507,6 +1600,9 @@ public class MellstroyEntity extends Monster {
     }
 
     private boolean isValidTarget(Player player) {
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
         if (!player.isAlive()
                 || player.isDeadOrDying()
                 || player.isSpectator()
@@ -1527,6 +1623,9 @@ public class MellstroyEntity extends Monster {
 
     /** Client-safe: true only while he actually has line of sight to this player. */
     public boolean isSeeing(Player player) {
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
         return player != null && this.entityData.get(DATA_SEEING_PLAYER) == player.getId();
     }
 
@@ -1692,6 +1791,9 @@ public class MellstroyEntity extends Monster {
 
     @Override
     public boolean doHurtTarget(Entity target) {
+        if (this.level().getDifficulty() == Difficulty.PEACEFUL) {
+            return false;
+        }
         if (!(target instanceof LivingEntity living)) {
             return false;
         }

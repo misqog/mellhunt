@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " G ",
+    "GWG",
+    " G "
+  ],
+  "key": {
+    "G": {
+      "item": "minecraft:gold_nugget"
+    },
+    "W": {
+      "item": "minecraft:red_wool"
+    }
+  },
+  "result": {
+    "item": "mellhunt:casino_carpet",
+    "count": 2
+  }
+}

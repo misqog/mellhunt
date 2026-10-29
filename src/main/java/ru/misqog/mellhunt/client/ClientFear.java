@@ -5,6 +5,7 @@ import ru.misqog.mellhunt.config.MellstroyConfig;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraftforge.api.distmarker.Dist;
@@ -30,6 +31,8 @@ public final class ClientFear {
     private static float flash;
     /** True while the nearest Mellstroy can actually see the player. */
     private static boolean seen;
+    /** Tracks the transition to Peaceful so leftover chase sounds are stopped. */
+    private static boolean peaceful;
 
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
@@ -42,10 +45,19 @@ public final class ClientFear {
             fear = 0.0F;
             flash = 0.0F;
             seen = false;
+            peaceful = false;
             return;
         }
 
-        if (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE) {
+        boolean nowPeaceful = mc.level.getDifficulty() == Difficulty.PEACEFUL;
+        if (nowPeaceful && !peaceful) {
+            // Peaceful must also cut a chase phrase or the reels that were
+            // already playing when the difficulty was switched.
+            MellstroyAudio.stopAll();
+        }
+        peaceful = nowPeaceful;
+
+        if ((mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE) || nowPeaceful) {
             fear = 0.0F;
             flash = 0.0F;
             seen = false;
@@ -86,7 +98,8 @@ public final class ClientFear {
     static void renderOverlay(ForgeGui gui, GuiGraphics graphics, float partialTick, int width, int height) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui
-                || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)) {
+                || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)
+                || (mc.level != null && mc.level.getDifficulty() == Difficulty.PEACEFUL)) {
             return;
         }
 
@@ -136,7 +149,9 @@ public final class ClientFear {
         }
 
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)) {
+        if (mc.player == null
+                || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)
+                || (mc.level != null && mc.level.getDifficulty() == Difficulty.PEACEFUL)) {
             return;
         }
 

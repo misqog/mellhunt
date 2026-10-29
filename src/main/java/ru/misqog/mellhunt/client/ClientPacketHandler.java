@@ -2,6 +2,7 @@ package ru.misqog.mellhunt.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
@@ -13,6 +14,16 @@ public final class ClientPacketHandler {
 
     public static void openCasino(int winChance) {
         Minecraft.getInstance().setScreen(new CasinoScreen(winChance));
+    }
+
+    public static void openSlotMachine(BlockPos pos, int winChance) {
+        Minecraft.getInstance().setScreen(new SlotMachineScreen(winChance, pos));
+    }
+
+    public static void showSlotResult(boolean won, int[] line, String prizeId, int prizeCount) {
+        if (Minecraft.getInstance().screen instanceof SlotMachineScreen screen) {
+            screen.receiveResult(won, line, prizeId, prizeCount);
+        }
     }
 
     public static void playTrackedSound(int entityId, ResourceLocation soundId, SoundSource source,

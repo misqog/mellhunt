@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "GMG",
+    "GSG",
+    "GDG"
+  ],
+  "key": {
+    "G": {
+      "item": "minecraft:gold_ingot"
+    },
+    "M": {
+      "item": "minecraft:magenta_dye"
+    },
+    "S": {
+      "item": "minecraft:glass"
+    },
+    "D": {
+      "item": "minecraft:glowstone_dust"
+    }
+  },
+  "result": {
+    "item": "mellhunt:mellstroy_sign",
+    "count": 1
+  }
+}
