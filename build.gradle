@@ -165,6 +165,66 @@ tasks.named('processResources', ProcessResources).configure {
     }
 }
 
+// An interrupted build can leave zero-filled text files in the processed
+// resources. FML then reads an empty mods.toml and the game dies at startup
+// without a useful crash report. Fail the build loudly instead of shipping
+// (or running) a broken resource tree.
+tasks.register('verifyProcessedResources') {
+    doLast {
+        File root = layout.buildDirectory.dir('resources/main').get().asFile
+        List<File> broken = new ArrayList<>()
+        if (root.isDirectory()) {
+            root.eachFileRecurse { File file ->
+                if (!file.isFile()) {
+                    return
+                }
+                String name = file.name.toLowerCase()
+                if (!(name.endsWith('.json') || name.endsWith('.toml') || name.endsWith('.mcmeta'))) {
+                    return
+                }
+                if (file.length() == 0L) {
+                    broken.add(file)
+                    return
+                }
+                byte[] head = new byte[64]
+                int read = 0
+                file.withInputStream { stream ->
+                    while (read < head.length) {
+                        int count = stream.read(head, read, head.length - read)
+                        if (count < 0) {
+                            break
+                        }
+                        read += count
+                    }
+                }
+                boolean allZero = read > 0
+                for (int i = 0; i < read; i++) {
+                    if (head[i] != 0) {
+                        allZero = false
+                        break
+                    }
+                }
+                if (allZero) {
+                    broken.add(file)
+                }
+            }
+        }
+        if (!broken.isEmpty()) {
+            throw new GradleException(
+                    "Processed resources are corrupted (zero-filled text files): " +
+                    broken.join(', ') + ". Run 'gradlew clean build' and do not interrupt it.")
+        }
+    }
+}
+
+tasks.named('build').configure { dependsOn 'verifyProcessedResources' }
+
+// Also run the check after every processResources, including when the game is
+// started straight from the IDE and processResources is considered up-to-date.
+tasks.named('processResources', ProcessResources).configure {
+    finalizedBy 'verifyProcessedResources'
+}
+
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
     manifest {
