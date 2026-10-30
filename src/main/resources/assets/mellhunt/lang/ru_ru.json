@@ -108,6 +108,13 @@
   "roulette.mellhunt.turbo": "ТУРБО",
   "roulette.mellhunt.history": "Последние числа",
   "roulette.mellhunt.bet": "Ставка: 1 золотой слиток",
+  "roulette.mellhunt.timer.prepare": "До ставок: %s",
+  "roulette.mellhunt.timer.bet": "Ставки: %s",
+  "roulette.mellhunt.timer.result": "Результат: %s",
+  "roulette.mellhunt.prepare": "Приготовьтесь...",
+  "roulette.mellhunt.pick_bet": "Выберите ставку",
+  "roulette.mellhunt.bet_accepted": "Ставка принята",
+  "roulette.mellhunt.no_bet": "Ставка не сделана",
 
   "poker.mellhunt.title": "Видеопокер «Меллстрой»",
   "poker.mellhunt.subtitle": "Джекс или лучше",

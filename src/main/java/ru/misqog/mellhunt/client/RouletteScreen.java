@@ -15,9 +15,9 @@ import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * A compact European roulette table: the wheel, the betting board, the last
- * numbers and the turbo toggle. The wheel texture is transparent around the
- * rim, so no black square corners are visible.
+ * Shared roulette table screen. The table runs on a timer, so this screen has
+ * no spin or turbo button: it only shows the shared phase, countdown, bets and
+ * the automatic result.
  */
 public class RouletteScreen extends Screen {
 
@@ -35,6 +35,15 @@ public class RouletteScreen extends Screen {
     private static final int OUTSIDE_H = 14;
     private static final float SEGMENT = 360.0F / 37.0F;
 
+    private static final int WHEEL_SIZE = 136;
+    private static final int WHEEL_TEXTURE = 272;
+    private static final int WHEEL_X = 8;
+    private static final int WHEEL_Y = 38;
+
+    private static final int BOARD_X = 166;
+    private static final int BOARD_Y = 38;
+    private static final int HISTORY_Y = 104;
+
     private static final int GOLD = 0xFFFFD24A;
     private static final int GOLD_DIM = 0xFF8A6A1E;
     private static final int GREEN = 0xFF6BFF7A;
@@ -44,14 +53,16 @@ public class RouletteScreen extends Screen {
     private final BlockPos pos;
 
     private int ticks;
+    private int phase = RouletteManager.PHASE_PREPARE;
+    private int stateTicks = RouletteManager.PREPARE_TICKS;
     private int betKind = RouletteManager.RED;
     private int betNumber;
+    private boolean betPlaced;
     private int[] history;
 
-    private boolean turbo;
-    private boolean spinTurbo;
     private boolean spinning;
     private boolean resultReceived;
+    private boolean resultStarted;
     private boolean settled;
     private int winning = -1;
     private int payout;
@@ -61,7 +72,7 @@ public class RouletteScreen extends Screen {
     private float spinStartAngle;
     private float spinEndAngle;
     private int resultAt = -1;
-    private int settleTicks = 58;
+    private int settleTicks = RouletteManager.SPIN_TICKS;
     private SimpleSoundInstance spinSound;
     private int[] pendingHistory;
 
@@ -71,36 +82,85 @@ public class RouletteScreen extends Screen {
         this.history = history == null ? new int[0] : history.clone();
     }
 
+    public BlockPos tablePos() {
+        return this.pos;
+    }
+
+    /** Shared timer/result state from the server. */
+    public void receiveState(int phase, int ticks, int winning, int[] history) {
+        if (history != null) {
+            this.pendingHistory = history.clone();
+        }
+
+        boolean phaseChanged = this.phase != phase;
+        this.phase = phase;
+        this.stateTicks = Math.max(0, ticks);
+
+        if (phase == RouletteManager.PHASE_RESULT && winning >= 0) {
+            this.winning = winning;
+            if (!this.resultStarted) {
+                this.resultStarted = true;
+                // A player can open the table mid-spin: shorten the animation so
+                // it still ends together with the server's result phase.
+                startResultSpin(winning,
+                        this.stateTicks - RouletteManager.RESULT_DISPLAY_TICKS);
+            }
+            return;
+        }
+
+        if (phaseChanged) {
+            resetRound();
+            if (phase == RouletteManager.PHASE_BET) {
+                this.betPlaced = false;
+                this.error = 0;
+            }
+        }
+    }
+
+    /** Personal result: whether this player's bet won and how much. */
     public void receiveResult(int winning, int kind, int number, boolean won,
                               int payout, int error, int[] history) {
         if (history != null) {
-            // Do not show the new number in the history strip until the wheel stops.
             this.pendingHistory = history.clone();
         }
-        if (!this.spinning || this.resultReceived) {
-            return;
-        }
-        this.winning = winning;
         this.payout = payout;
         this.error = error;
-        this.betKind = kind;
-        this.betNumber = number;
 
         if (error != 0) {
-            this.spinning = false;
-            this.settled = true;
+            this.betPlaced = false;
             this.winning = -1;
-            applyPendingHistory();
-            stopSpinSound();
             return;
         }
 
+        if (kind >= 0) {
+            this.betKind = kind;
+            this.betNumber = number;
+            this.betPlaced = true;
+        } else {
+            this.betPlaced = false;
+        }
+
+        if (winning >= 0) {
+            this.winning = winning;
+            if (!this.resultStarted) {
+                this.resultStarted = true;
+                startResultSpin(winning, RouletteManager.SPIN_TICKS);
+            }
+        }
+    }
+
+    private void startResultSpin(int winning, int spinTicks) {
+        if (this.spinning) {
+            return;
+        }
+        this.spinning = true;
         this.resultReceived = true;
+        this.settled = false;
         this.resultAt = this.ticks;
         this.spinStartAngle = this.angle;
-        this.settleTicks = this.spinTurbo ? 30 : 90;
+        this.settleTicks = Math.max(1, Math.min(RouletteManager.SPIN_TICKS, spinTicks));
 
-        float target = (-winning * SEGMENT) % 360.0F;
+        float target = (-RouletteManager.wheelPocket(winning) * SEGMENT) % 360.0F;
         if (target < 0.0F) {
             target += 360.0F;
         }
@@ -109,40 +169,52 @@ public class RouletteScreen extends Screen {
         if (delta < 0.0F) {
             delta += 360.0F;
         }
-        // One extra turn with an ease-out gives an initial speed close to the
-        // pre-result spin (12 deg/tick normal, ~36 deg/tick turbo), so the
-        // transition does not jerk.
-        this.spinEndAngle = this.angle + 360.0F + delta;
+        this.spinEndAngle = this.angle
+                + 360.0F * 4.0F * (this.settleTicks / (float) RouletteManager.SPIN_TICKS)
+                + delta;
+
+        this.spinSound = SimpleSoundInstance.forUI(ModSounds.PROKRUTKA.get(), 1.0F);
+        Minecraft.getInstance().getSoundManager().play(this.spinSound);
     }
 
-    private void startSpin() {
-        if (this.spinning) {
-            return;
-        }
-        this.spinning = true;
+    private void resetRound() {
+        applyPendingHistory();
+        stopSpinSound();
+        this.spinning = false;
         this.resultReceived = false;
+        this.resultStarted = false;
         this.settled = false;
         this.winning = -1;
         this.payout = 0;
         this.error = 0;
+        this.betPlaced = false;
         this.resultAt = -1;
-        this.spinTurbo = this.turbo;
-        this.pendingHistory = null;
-        ModNetwork.sendRouletteSpin(this.pos, this.betKind, this.betNumber, this.spinTurbo);
-        this.spinSound = SimpleSoundInstance.forUI(ModSounds.PROKRUTKA.get(),
-                this.spinTurbo ? 1.3F : 1.0F);
-        Minecraft.getInstance().getSoundManager().play(this.spinSound);
+        this.angle = 0.0F;
+    }
+
+    private boolean canBet() {
+        return this.phase == RouletteManager.PHASE_BET && !this.spinning && !this.settled;
+    }
+
+    private void placeBet(int kind, int number) {
+        if (!canBet()) {
+            return;
+        }
+        this.betKind = kind;
+        this.betNumber = kind == RouletteManager.NUMBER ? number : 0;
+        this.betPlaced = true;
+        this.error = 0;
+        ModNetwork.sendRouletteSpin(this.pos, kind, this.betNumber);
     }
 
     @Override
     public void tick() {
         ++this.ticks;
-        if (!this.spinning) {
-            return;
+        if (this.stateTicks > 0) {
+            --this.stateTicks;
         }
 
-        if (!this.resultReceived) {
-            this.angle += this.spinTurbo ? 34.0F : 12.0F;
+        if (!this.spinning) {
             return;
         }
 
@@ -176,80 +248,134 @@ public class RouletteScreen extends Screen {
         graphics.drawCenteredString(this.font,
                 Component.translatable("roulette.mellhunt.subtitle"), centerX, top + 21, GREY);
 
-        int wheelX = left + 8;
-        int wheelY = top + 38;
-        drawWheel(graphics, wheelX, wheelY);
+        drawWheel(graphics, left, top);
 
-        int boardX = left + 134;
-        int boardY = top + 38;
+        int boardX = left + BOARD_X;
+        int boardY = top + BOARD_Y;
         drawBoard(graphics, boardX, boardY, mouseX, mouseY);
         drawOutsideButtons(graphics, boardX, boardY, mouseX, mouseY);
-        drawHistory(graphics, left + 8, top + 146);
+        drawHistory(graphics, left + BOARD_X, top + HISTORY_Y);
 
-        drawToggle(graphics, centerX + 65, top + 186, 50, 22,
-                Component.translatable("roulette.mellhunt.turbo"), this.turbo,
-                mouseX, mouseY, !this.spinning);
-        drawSpinButton(graphics, centerX - 59, top + 186, 118, 22, mouseX, mouseY);
+        drawTimer(graphics, centerX, top + 180);
 
         Component status;
         int colour;
         if (this.error != 0) {
             status = Component.translatable("roulette.mellhunt.no_gold");
             colour = RED_TEXT;
-        } else if (this.settled && this.winning >= 0) {
-            Component number = Component.literal(Integer.toString(this.winning));
-            if (this.payout > 0) {
-                status = Component.translatable("roulette.mellhunt.win", number, this.payout);
+        } else if (this.phase == RouletteManager.PHASE_RESULT) {
+            if (this.spinning) {
+                status = Component.translatable("roulette.mellhunt.spinning");
+                colour = GREY;
+            } else if (this.winning >= 0 && this.payout > 0) {
+                status = Component.translatable("roulette.mellhunt.win",
+                        Component.literal(Integer.toString(this.winning)), this.payout);
                 colour = GREEN;
-            } else {
-                status = Component.translatable("roulette.mellhunt.lose", number);
+            } else if (this.winning >= 0 && this.betPlaced) {
+                status = Component.translatable("roulette.mellhunt.lose",
+                        Component.literal(Integer.toString(this.winning)));
                 colour = RED_TEXT;
+            } else {
+                status = Component.translatable("roulette.mellhunt.no_bet");
+                colour = GREY;
             }
-        } else if (this.spinning) {
-            status = Component.translatable("roulette.mellhunt.spinning");
-            colour = GREY;
+        } else if (this.phase == RouletteManager.PHASE_BET) {
+            status = Component.translatable(this.betPlaced
+                    ? "roulette.mellhunt.bet_accepted"
+                    : "roulette.mellhunt.pick_bet");
+            colour = this.betPlaced ? GREEN : GREY;
         } else {
-            status = Component.translatable("roulette.mellhunt.pick");
-            colour = GREY;
+            status = Component.translatable("roulette.mellhunt.prepare");
+            colour = GOLD;
         }
-        graphics.drawCenteredString(this.font, status, centerX, top + 212, colour);
+        graphics.drawCenteredString(this.font, status, centerX, top + 206, colour);
         graphics.drawCenteredString(this.font,
-                Component.translatable("roulette.mellhunt.paytable"), centerX, top + 226, GOLD_DIM);
+                Component.translatable("roulette.mellhunt.paytable"), centerX, top + 224, GOLD_DIM);
         graphics.drawCenteredString(this.font,
-                Component.translatable("roulette.mellhunt.bet"), centerX, top + 240, GOLD_DIM);
+                Component.translatable("roulette.mellhunt.bet"), centerX, top + 242, GOLD_DIM);
     }
 
-    private void drawWheel(GuiGraphics graphics, int x, int y) {
-        int cx = x + 52;
-        int cy = y + 52;
+    private void drawTimer(GuiGraphics graphics, int centerX, int y) {
+        Component label = null;
+        int colour = GOLD;
+        int total;
+        int ticks;
+        if (this.phase == RouletteManager.PHASE_BET) {
+            ticks = this.stateTicks;
+            total = RouletteManager.BET_TICKS;
+            label = Component.translatable("roulette.mellhunt.timer.bet",
+                    Math.max(0, (ticks + 19) / 20));
+            colour = GREEN;
+        } else if (this.phase == RouletteManager.PHASE_RESULT) {
+            // Count down to the moment the wheel stops, not the whole phase:
+            // the result display after the stop has no deadline to show.
+            ticks = Math.max(0, this.stateTicks - RouletteManager.RESULT_DISPLAY_TICKS);
+            total = RouletteManager.SPIN_TICKS;
+            if (ticks > 0) {
+                label = Component.translatable("roulette.mellhunt.timer.result",
+                        Math.max(0, (ticks + 19) / 20));
+            }
+        } else {
+            ticks = this.stateTicks;
+            total = RouletteManager.PREPARE_TICKS;
+            label = Component.translatable("roulette.mellhunt.timer.prepare",
+                    Math.max(0, (ticks + 19) / 20));
+        }
+        if (label != null) {
+            graphics.drawCenteredString(this.font, label, centerX, y, colour);
+        }
+
+        float progress = total <= 0 ? 0.0F : Math.max(0.0F, Math.min(1.0F,
+                ticks / (float) total));
+        int barW = 220;
+        int barX = centerX - barW / 2;
+        int barY = y + 12;
+        graphics.fill(barX - 1, barY - 1, barX + barW + 1, barY + 5, 0xFF000000);
+        graphics.fill(barX, barY, barX + barW, barY + 4, 0xFF2A1A0C);
+        graphics.fill(barX, barY, barX + Math.round(barW * progress), barY + 4, colour);
+    }
+
+    private void drawWheel(GuiGraphics graphics, int left, int top) {
+        int cx = left + WHEEL_X + WHEEL_SIZE / 2;
+        int cy = top + WHEEL_Y + WHEEL_SIZE / 2;
 
         graphics.pose().pushPose();
         graphics.pose().translate(cx, cy, 0.0F);
         graphics.pose().mulPose(Axis.ZP.rotationDegrees(this.angle));
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        // Full 256x256 texture, so the wheel's centre (128,128) maps exactly to
-        // the rotation origin and the wheel does not wobble.
-        graphics.blit(WHEEL, -52, -52, 104, 104, 0, 0, 256, 256, 256, 256);
-        // The small centre square rotates with the wheel.
-        graphics.fill(-10, -10, 10, 10, 0xFF2A1A0E);
-        graphics.fill(-9, -9, 9, 9, GOLD);
-        graphics.fill(-6, -6, 6, 6, 0xFF6B4A12);
+        graphics.blit(WHEEL, -WHEEL_SIZE / 2, -WHEEL_SIZE / 2, WHEEL_SIZE, WHEEL_SIZE,
+                0, 0, WHEEL_TEXTURE, WHEEL_TEXTURE, WHEEL_TEXTURE, WHEEL_TEXTURE);
         graphics.pose().popPose();
 
-        // Fixed pointer at 12 o'clock.
-        graphics.fill(cx - 2, cy - 58, cx + 3, cy - 48, GOLD);
-        graphics.fill(cx - 4, cy - 50, cx + 5, cy - 46, GOLD);
+        drawPointer(graphics, cx, top + WHEEL_Y);
 
+        // The numbers are baked into the wheel texture, so they spin with it.
+        // Only the winning number is drawn on top, once the wheel has stopped.
         if (this.settled && this.winning >= 0) {
             graphics.drawCenteredString(this.font, Integer.toString(this.winning),
                     cx, cy - 4, 0xFFFFFFFF);
         }
     }
 
+    /** Fixed golden marker that shows which pocket sits under the top. */
+    private static void drawPointer(GuiGraphics graphics, int cx, int top) {
+        int outline = 0xFF3A2408;
+        for (int i = 0; i < 11; ++i) {
+            int half = 5 - i / 2;
+            int y = top - 9 + i;
+            graphics.fill(cx - half - 1, y, cx + half + 2, y + 1, outline);
+        }
+        for (int i = 0; i < 10; ++i) {
+            int half = 4 - i / 2;
+            int y = top - 9 + i;
+            graphics.fill(cx - half, y, cx + half + 1, y + 1, GOLD);
+        }
+    }
+
     private void drawBoard(GuiGraphics graphics, int x, int y, int mouseX, int mouseY) {
         drawCell(graphics, x - 16, y + CELL_H, CELL_W, CELL_H, 0, 0xFF1F8A4C,
-                this.betKind == RouletteManager.NUMBER && this.betNumber == 0, mouseX, mouseY);
+                isBetSelected(RouletteManager.NUMBER, 0), mouseX, mouseY);
 
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < BOARD_COLS; col++) {
@@ -257,16 +383,28 @@ public class RouletteScreen extends Screen {
                 int cellX = x + col * CELL_W;
                 int cellY = y + row * CELL_H;
                 int colour = RouletteManager.isRed(number) ? 0xFFB5212B : 0xFF17171C;
-                boolean selected = this.betKind == RouletteManager.NUMBER && this.betNumber == number;
-                drawCell(graphics, cellX, cellY, CELL_W, CELL_H, number, colour, selected, mouseX, mouseY);
+                drawCell(graphics, cellX, cellY, CELL_W, CELL_H, number, colour,
+                        isBetSelected(RouletteManager.NUMBER, number), mouseX, mouseY);
             }
         }
+    }
+
+    /**
+     * Gold outline of the player's bet. It is only drawn while the bet is live:
+     * the moment the wheel stops and the winning number appears, the board is
+     * cleared of the old selection.
+     */
+    private boolean isBetSelected(int kind, int number) {
+        return this.betPlaced
+                && !this.settled
+                && this.betKind == kind
+                && this.betNumber == number;
     }
 
     private void drawCell(GuiGraphics graphics, int x, int y, int w, int h, int number, int colour,
                           boolean selected, int mouseX, int mouseY) {
         graphics.fill(x, y, x + w, y + h, colour);
-        boolean hover = !this.spinning && inside(mouseX, mouseY, x, y, w, h);
+        boolean hover = canBet() && inside(mouseX, mouseY, x, y, w, h);
         int border = selected ? GOLD : (hover ? 0xFFFFF0B0 : 0x99000000);
         graphics.fill(x, y, x + w, y + 1, border);
         graphics.fill(x, y + h - 1, x + w, y + h, border);
@@ -284,8 +422,8 @@ public class RouletteScreen extends Screen {
                 "roulette.mellhunt.low", "roulette.mellhunt.high"};
         for (int i = 0; i < kinds.length; i++) {
             int bx = x + i * OUTSIDE_W;
-            boolean selected = this.betKind == kinds[i];
-            boolean hover = !this.spinning
+            boolean selected = isBetSelected(kinds[i], 0);
+            boolean hover = canBet()
                     && inside(mouseX, mouseY, bx, buttonY, OUTSIDE_W, OUTSIDE_H);
             int fill = kinds[i] == RouletteManager.RED ? 0xFF6B1418
                     : kinds[i] == RouletteManager.BLACK ? 0xFF17171C : 0xFF2A1A0C;
@@ -316,54 +454,28 @@ public class RouletteScreen extends Screen {
         }
     }
 
-    private void drawSpinButton(GuiGraphics graphics, int x, int y, int w, int h,
-                                int mouseX, int mouseY) {
-        boolean enabled = !this.spinning;
-        boolean hovered = enabled && inside(mouseX, mouseY, x, y, w, h);
-        graphics.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0xFF000000);
-        graphics.fill(x - 1, y - 1, x + w + 1, y + h + 1, enabled ? GOLD : GOLD_DIM);
-        graphics.fill(x, y, x + w, y + h,
-                enabled ? (hovered ? 0xFF7A5A10 : 0xFF4A350A) : 0xFF2A1A1C);
-        graphics.drawCenteredString(this.font,
-                Component.translatable(this.spinning
-                        ? "roulette.mellhunt.spinning" : "roulette.mellhunt.spin"),
-                x + w / 2, y + 7, enabled ? GOLD : GREY);
-    }
-
-    private void drawToggle(GuiGraphics graphics, int x, int y, int w, int h,
-                            Component text, boolean on, int mouseX, int mouseY, boolean enabled) {
-        boolean hovered = enabled && inside(mouseX, mouseY, x, y, w, h);
-        graphics.fill(x - 2, y - 2, x + w + 2, y + h + 2, 0xFF000000);
-        graphics.fill(x - 1, y - 1, x + w + 1, y + h + 1, enabled ? GOLD_DIM : 0xFF3A2A10);
-        graphics.fill(x, y, x + w, y + h,
-                on ? (hovered ? 0xFF2E7A3A : 0xFF1E5A2A) : (hovered ? 0xFF2A3A2E : 0xFF16241A));
-        graphics.drawCenteredString(this.font, text, x + w / 2, y + 7,
-                on ? GREEN : GREY);
-    }
-
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button) || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
-        if (this.spinning) {
+        if (!canBet()) {
             return false;
         }
+
         int left = (this.width - PANEL_W) / 2;
         int top = (this.height - PANEL_H) / 2;
-        int boardX = left + 134;
-        int boardY = top + 38;
+        int boardX = left + BOARD_X;
+        int boardY = top + BOARD_Y;
 
         if (inside(mouseX, mouseY, boardX - 16, boardY + CELL_H, CELL_W, CELL_H)) {
-            this.betKind = RouletteManager.NUMBER;
-            this.betNumber = 0;
+            placeBet(RouletteManager.NUMBER, 0);
             return true;
         }
         if (inside(mouseX, mouseY, boardX, boardY, BOARD_COLS * CELL_W, 3 * CELL_H)) {
             int col = ((int) mouseX - boardX) / CELL_W;
             int row = ((int) mouseY - boardY) / CELL_H;
-            this.betKind = RouletteManager.NUMBER;
-            this.betNumber = row * BOARD_COLS + col + 1;
+            placeBet(RouletteManager.NUMBER, row * BOARD_COLS + col + 1);
             return true;
         }
 
@@ -372,16 +484,7 @@ public class RouletteScreen extends Screen {
             int index = ((int) mouseX - boardX) / OUTSIDE_W;
             int[] kinds = {RouletteManager.RED, RouletteManager.BLACK, RouletteManager.EVEN,
                     RouletteManager.ODD, RouletteManager.LOW, RouletteManager.HIGH};
-            this.betKind = kinds[Math.max(0, Math.min(kinds.length - 1, index))];
-            return true;
-        }
-
-        if (inside(mouseX, mouseY, this.width / 2 - 59, top + 186, 118, 22)) {
-            startSpin();
-            return true;
-        }
-        if (inside(mouseX, mouseY, this.width / 2 + 65, top + 186, 50, 22)) {
-            this.turbo = !this.turbo;
+            placeBet(kinds[Math.max(0, Math.min(kinds.length - 1, index))], 0);
             return true;
         }
         return false;

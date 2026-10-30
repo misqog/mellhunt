@@ -1,10 +1,12 @@
 package ru.misqog.mellhunt.casino;
 
+import ru.misqog.mellhunt.MellstroyMod;
 import ru.misqog.mellhunt.block.CasinoTableBlock;
 import ru.misqog.mellhunt.network.ModNetwork;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -15,21 +17,34 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
- * European roulette on the roulette table.
+ * Shared European roulette on the 2x2 roulette table.
  *
- * <p>The player selects one bet and spins. A number pays 36x, red/black,
- * even/odd and low/high pay 2x (stake included). The spin costs one gold
- * ingot. The result is decided on the server; the client animates the wheel
- * to the number, and the gold is paid only after that animation.</p>
+ * <p>Every table has its own timer and bets:
+ * <ul>
+ *   <li>8 seconds wheel spin, then 5 seconds of result display,</li>
+ *   <li>5 seconds countdown before betting,</li>
+ *   <li>10 seconds of betting,</li>
+ *   <li>automatic spin at the end of the betting window.</li>
+ * </ul>
+ * All players who have that table open see the same phase, timer and result.
+ * There is no spin button and no turbo: the table runs by itself.</p>
  */
+@Mod.EventBusSubscriber(modid = MellstroyMod.MOD_ID)
 public final class RouletteManager {
 
     public static final int RED = 0;
@@ -42,32 +57,107 @@ public final class RouletteManager {
 
     public static final int KIND_COUNT = 7;
 
-    private static final int MAX_DISTANCE_SQR = 64;
+    public static final int PHASE_PREPARE = 0;
+    public static final int PHASE_BET = 1;
+    public static final int PHASE_RESULT = 2;
+
+    public static final int PREPARE_TICKS = 5 * 20;
+    public static final int BET_TICKS = 10 * 20;
+    /** The wheel animation itself lasts 8 seconds. */
+    public static final int SPIN_TICKS = 8 * 20;
+    /** How long the stopped wheel and the result stay on screen. */
+    public static final int RESULT_DISPLAY_TICKS = 5 * 20;
+    /** 8 s spin + 5 s result display. */
+    public static final int RESULT_TICKS = SPIN_TICKS + RESULT_DISPLAY_TICKS;
+
+    private static final int MAX_DISTANCE_SQR = 8 * 8;
     private static final int HISTORY_TICKS = 5 * 60 * 20;
     private static final int MAX_HISTORY = 10;
 
     private static final Set<Integer> RED_NUMBERS = Set.of(
             1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36);
 
+    public static final int POCKETS = 37;
+
+    /**
+     * Real European wheel order, clockwise from the green 0 at the top.
+     * Red and black strictly alternate around the wheel.
+     */
+    private static final int[] WHEEL_ORDER = {
+            0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23,
+            10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
+    };
+
+    /** Number printed in the given pocket (0 is the top pocket). */
+    public static int wheelNumber(int pocket) {
+        return WHEEL_ORDER[Math.floorMod(pocket, POCKETS)];
+    }
+
+    /** Pocket that carries the given number, 0 at the top, clockwise. */
+    public static int wheelPocket(int number) {
+        for (int pocket = 0; pocket < POCKETS; pocket++) {
+            if (WHEEL_ORDER[pocket] == number) {
+                return pocket;
+            }
+        }
+        return 0;
+    }
+
     private record HistoryEntry(int number, long time) {
+    }
+
+    private record Bet(int kind, int number) {
     }
 
     private static final Map<ResourceKey<Level>, Map<BlockPos, Deque<HistoryEntry>>> HISTORY =
             new HashMap<>();
+
+    /** One independent timer/bet pool per table anchor. */
+    private static final Map<ResourceKey<Level>, Map<BlockPos, TableState>> TABLES = new HashMap<>();
+
+    private static final class TableState {
+        private final ServerLevel level;
+        private final BlockPos pos;
+        private final Set<UUID> viewers = new HashSet<>();
+        private final Map<UUID, Bet> bets = new HashMap<>();
+        private int phase = PHASE_PREPARE;
+        private int ticks = PREPARE_TICKS;
+        private int winning = -1;
+
+        private TableState(ServerLevel level, BlockPos pos) {
+            this.level = level;
+            this.pos = pos;
+        }
+    }
+
+    private static Map<BlockPos, TableState> tables(ServerLevel level) {
+        return TABLES.computeIfAbsent(level.dimension(), key -> new HashMap<>());
+    }
+
+    public static int phaseTicks(int phase) {
+        return switch (phase) {
+            case PHASE_BET -> BET_TICKS;
+            case PHASE_RESULT -> RESULT_TICKS;
+            default -> PREPARE_TICKS;
+        };
+    }
 
     public static void open(ServerPlayer player, BlockPos pos) {
         if (!isValidTable(player, pos)) {
             return;
         }
         ServerLevel level = player.serverLevel();
+        TableState state = tables(level).computeIfAbsent(pos.immutable(),
+                key -> new TableState(level, key));
+        state.viewers.add(player.getUUID());
+
         ModNetwork.sendOpenRoulette(player, pos, history(level, pos));
+        sendState(player, level, state);
     }
 
-    public static void spin(ServerPlayer player, BlockPos pos, int kind, int number, boolean turbo) {
-        if (!isValidTable(player, pos)) {
-            return;
-        }
-        if (kind < 0 || kind >= KIND_COUNT) {
+    /** Places or changes the player's bet for the current round. */
+    public static void bet(ServerPlayer player, BlockPos pos, int kind, int number) {
+        if (!isValidTable(player, pos) || kind < 0 || kind >= KIND_COUNT) {
             return;
         }
         if (kind == NUMBER && (number < 0 || number > 36)) {
@@ -77,32 +167,158 @@ public final class RouletteManager {
             number = 0;
         }
 
-        boolean free = player.isCreative();
-        if (!free && !CasinoMoney.takeGold(player)) {
-            ModNetwork.sendRouletteResult(player, 0, kind, number, false, 0, 1,
-                    history(player.serverLevel(), pos));
+        ServerLevel level = player.serverLevel();
+        TableState state = tables(level).get(pos);
+        if (state == null) {
+            return;
+        }
+        if (state.phase != PHASE_BET) {
+            sendState(player, level, state);
+            return;
+        }
+
+        state.viewers.add(player.getUUID());
+        UUID id = player.getUUID();
+        if (!state.bets.containsKey(id) && !player.isCreative() && !CasinoMoney.takeGold(player)) {
+            ModNetwork.sendRouletteResult(player, -1, kind, number, false, 0, 1,
+                    history(level, pos));
             player.displayClientMessage(
                     Component.translatable("roulette.mellhunt.no_gold"), true);
             return;
         }
 
-        RandomSource random = player.getRandom();
-        int winning = random.nextInt(37);
-        boolean won = isWin(kind, number, winning);
-        int payout = won ? (kind == NUMBER ? 36 : 2) : 0;
+        state.bets.put(id, new Bet(kind, number));
+        level.playSound(null, pos, SoundEvents.UI_BUTTON_CLICK.get(), SoundSource.BLOCKS,
+                0.35F, 1.4F);
+    }
 
-        ServerLevel level = player.serverLevel();
-        record(level, pos, winning);
-
-        // The gold stays in the "house" until the wheel animation is over.
-        if (payout > 0) {
-            PendingPayouts.schedule(player, new ItemStack(Items.GOLD_INGOT, payout),
-                    turbo ? 45 : 125);
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        MinecraftServer server = event.getServer();
+        if (server == null) {
+            return;
         }
 
-        level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.6F, 1.1F);
-        ModNetwork.sendRouletteResult(player, winning, kind, number, won, payout, 0,
-                history(level, pos));
+        for (var dimensionEntry : new ArrayList<>(TABLES.entrySet())) {
+            ServerLevel level = server.getLevel(dimensionEntry.getKey());
+            if (level == null) {
+                TABLES.remove(dimensionEntry.getKey());
+                continue;
+            }
+
+            Map<BlockPos, TableState> tables = dimensionEntry.getValue();
+            for (var tableEntry : new ArrayList<>(tables.entrySet())) {
+                TableState state = tableEntry.getValue();
+                if (!(level.getBlockState(state.pos).getBlock() instanceof CasinoTableBlock)) {
+                    tables.remove(tableEntry.getKey());
+                    continue;
+                }
+                pruneViewers(server, state);
+
+                if (state.viewers.isEmpty()) {
+                    tables.remove(tableEntry.getKey());
+                    continue;
+                }
+
+                state.ticks--;
+                if (state.ticks <= 0) {
+                    advance(level, state);
+                } else if (state.ticks % 20 == 0) {
+                    broadcastState(level, state);
+                }
+            }
+
+            if (tables.isEmpty()) {
+                TABLES.remove(dimensionEntry.getKey());
+            }
+        }
+    }
+
+    private static void advance(ServerLevel level, TableState state) {
+        switch (state.phase) {
+            case PHASE_PREPARE -> {
+                state.phase = PHASE_BET;
+                state.ticks = BET_TICKS;
+                state.winning = -1;
+                broadcastState(level, state);
+            }
+            case PHASE_BET -> resolve(level, state);
+            default -> {
+                state.phase = PHASE_PREPARE;
+                state.ticks = PREPARE_TICKS;
+                state.winning = -1;
+                broadcastState(level, state);
+            }
+        }
+    }
+
+    private static void resolve(ServerLevel level, TableState state) {
+        RandomSource random = level.random;
+        int winning = random.nextInt(37);
+
+        state.phase = PHASE_RESULT;
+        state.ticks = RESULT_TICKS;
+        state.winning = winning;
+        record(level, state.pos, winning);
+        int[] history = history(level, state.pos);
+
+        broadcastState(level, state);
+        for (UUID id : state.viewers) {
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
+            if (player == null) {
+                continue;
+            }
+
+            Bet bet = state.bets.get(id);
+            if (bet == null) {
+                ModNetwork.sendRouletteResult(player, winning, -1, 0, false, 0, 0, history);
+                continue;
+            }
+
+            boolean won = isWin(bet.kind(), bet.number(), winning);
+            int payout = won ? (bet.kind() == NUMBER ? 36 : 2) : 0;
+            if (payout > 0) {
+                PendingPayouts.schedule(player, new ItemStack(Items.GOLD_INGOT, payout),
+                        SPIN_TICKS);
+            }
+            ModNetwork.sendRouletteResult(player, winning, bet.kind(), bet.number(),
+                    won, payout, 0, history);
+        }
+
+        state.bets.clear();
+        level.playSound(null, state.pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.6F, 1.1F);
+    }
+
+    private static void pruneViewers(MinecraftServer server, TableState state) {
+        for (UUID id : new ArrayList<>(state.viewers)) {
+            ServerPlayer player = server.getPlayerList().getPlayer(id);
+            if (player == null
+                    || player.serverLevel() != state.level
+                    || player.isSpectator()
+                    || CasinoManager.isInCasino(player)
+                    || player.distanceToSqr(Vec3.atCenterOf(state.pos)) > MAX_DISTANCE_SQR) {
+                state.viewers.remove(id);
+            }
+        }
+    }
+
+    private static void broadcastState(ServerLevel level, TableState state) {
+        int[] history = history(level, state.pos);
+        for (UUID id : new ArrayList<>(state.viewers)) {
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
+            if (player != null) {
+                ModNetwork.sendRouletteState(player, state.pos, state.phase, state.ticks,
+                        state.winning, history);
+            }
+        }
+    }
+
+    private static void sendState(ServerPlayer player, ServerLevel level, TableState state) {
+        ModNetwork.sendRouletteState(player, state.pos, state.phase, state.ticks,
+                state.winning, history(level, state.pos));
     }
 
     public static boolean isRed(int number) {
@@ -168,7 +384,7 @@ public final class RouletteManager {
         if (!(state.getBlock() instanceof CasinoTableBlock)) {
             return false;
         }
-        return player.distanceToSqr(Vec3.atCenterOf(pos)) <= MAX_DISTANCE_SQR;
+        return player.distanceToSqr(Vec3.atCenterOf(pos)) <= MAX_DISTANCE_SQR * 4;
     }
 
     private RouletteManager() {

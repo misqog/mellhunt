@@ -108,6 +108,13 @@
   "roulette.mellhunt.turbo": "TURBO",
   "roulette.mellhunt.history": "Last numbers",
   "roulette.mellhunt.bet": "Bet: 1 gold ingot",
+  "roulette.mellhunt.timer.prepare": "Betting in: %s",
+  "roulette.mellhunt.timer.bet": "Betting: %s",
+  "roulette.mellhunt.timer.result": "Result: %s",
+  "roulette.mellhunt.prepare": "Get ready...",
+  "roulette.mellhunt.pick_bet": "Choose your bet",
+  "roulette.mellhunt.bet_accepted": "Bet placed",
+  "roulette.mellhunt.no_bet": "No bet placed",
 
   "poker.mellhunt.title": "Mellstroy Video Poker",
   "poker.mellhunt.subtitle": "Jacks or Better",

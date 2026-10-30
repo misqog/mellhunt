@@ -8,31 +8,28 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-/** Client -> server: place a bet and spin the roulette wheel. */
+/** Client -> server: place or change the player's bet for the current round. */
 public class RouletteSpinPacket {
 
     private final BlockPos pos;
     private final int kind;
     private final int number;
-    private final boolean turbo;
 
-    public RouletteSpinPacket(BlockPos pos, int kind, int number, boolean turbo) {
+    public RouletteSpinPacket(BlockPos pos, int kind, int number) {
         this.pos = pos.immutable();
         this.kind = kind;
         this.number = number;
-        this.turbo = turbo;
     }
 
     public static void encode(RouletteSpinPacket packet, FriendlyByteBuf buffer) {
         buffer.writeBlockPos(packet.pos);
         buffer.writeByte(packet.kind);
         buffer.writeByte(packet.number);
-        buffer.writeBoolean(packet.turbo);
     }
 
     public static RouletteSpinPacket decode(FriendlyByteBuf buffer) {
         return new RouletteSpinPacket(buffer.readBlockPos(),
-                buffer.readUnsignedByte(), buffer.readUnsignedByte(), buffer.readBoolean());
+                buffer.readUnsignedByte(), buffer.readUnsignedByte());
     }
 
     public static void handle(RouletteSpinPacket packet, Supplier<NetworkEvent.Context> context) {
@@ -40,7 +37,7 @@ public class RouletteSpinPacket {
         ctx.enqueueWork(() -> {
             ServerPlayer player = ctx.getSender();
             if (player != null) {
-                RouletteManager.spin(player, packet.pos, packet.kind, packet.number, packet.turbo);
+                RouletteManager.bet(player, packet.pos, packet.kind, packet.number);
             }
         });
         ctx.setPacketHandled(true);

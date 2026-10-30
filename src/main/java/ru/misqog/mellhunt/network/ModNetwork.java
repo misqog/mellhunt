@@ -17,7 +17,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetwork {
 
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "4";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MellstroyMod.MOD_ID, "main"),
@@ -84,6 +84,11 @@ public final class ModNetwork {
                 .encoder(RouletteResultPacket::encode)
                 .decoder(RouletteResultPacket::decode)
                 .consumerMainThread(RouletteResultPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(RouletteStatePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(RouletteStatePacket::encode)
+                .decoder(RouletteStatePacket::decode)
+                .consumerMainThread(RouletteStatePacket::handle)
                 .add();
         CHANNEL.messageBuilder(OpenPokerPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(OpenPokerPacket::encode)
@@ -162,15 +167,20 @@ public final class ModNetwork {
                 new OpenRoulettePacket(pos, history));
     }
 
-    public static void sendRouletteSpin(BlockPos pos, int kind, int number, boolean turbo) {
-        CHANNEL.send(PacketDistributor.SERVER.noArg(),
-                new RouletteSpinPacket(pos, kind, number, turbo));
+    public static void sendRouletteSpin(BlockPos pos, int kind, int number) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new RouletteSpinPacket(pos, kind, number));
     }
 
     public static void sendRouletteResult(ServerPlayer player, int winning, int kind, int number,
                                           boolean won, int payout, int error, int[] history) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new RouletteResultPacket(winning, kind, number, won, payout, error, history));
+    }
+
+    public static void sendRouletteState(ServerPlayer player, BlockPos pos, int phase, int ticks,
+                                         int winning, int[] history) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new RouletteStatePacket(pos, phase, ticks, winning, history));
     }
 
     public static void sendOpenPoker(ServerPlayer player, BlockPos pos) {

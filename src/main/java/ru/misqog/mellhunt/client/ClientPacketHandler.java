@@ -32,6 +32,14 @@ public final class ClientPacketHandler {
         }
     }
 
+    public static void updateRouletteState(BlockPos pos, int phase, int ticks, int winning,
+                                           int[] history) {
+        if (Minecraft.getInstance().screen instanceof RouletteScreen screen
+                && screen.tablePos().equals(pos)) {
+            screen.receiveState(phase, ticks, winning, history);
+        }
+    }
+
     public static void openPoker(BlockPos pos) {
         Minecraft.getInstance().setScreen(new PokerScreen(pos));
     }
