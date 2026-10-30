@@ -7,9 +7,12 @@ import ru.misqog.mellhunt.block.ChekushkaBlock;
 import ru.misqog.mellhunt.block.ChipStackBlock;
 import ru.misqog.mellhunt.block.LaptopBlock;
 import ru.misqog.mellhunt.block.MellstroySignBlock;
+import ru.misqog.mellhunt.block.PokerTableBlock;
 import ru.misqog.mellhunt.block.SlotMachineBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.CarpetBlock;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraftforge.registries.DeferredRegister;
@@ -62,11 +65,23 @@ public final class ModBlocks {
                     .strength(1.8F)
                     .sound(SoundType.STONE)));
 
-    /** Deep red carpet with a gold medallion. */
+    /** Stairs made of the same black-and-gold VIP floor. */
+    public static final RegistryObject<Block> CASINO_FLOOR_GOLD_STAIRS = BLOCKS.register("casino_floor_gold_stairs",
+            () -> new StairBlock(() -> CASINO_FLOOR_GOLD.get().defaultBlockState(),
+                    BlockBehaviour.Properties.of()
+                            .strength(1.8F)
+                            .sound(SoundType.STONE)));
+
+    /**
+     * Deep red carpet with a gold medallion. It is a real vanilla-style carpet:
+     * one pixel high, it can be placed on top of any solid block and breaks
+     * when that support is removed.
+     */
     public static final RegistryObject<Block> CASINO_CARPET = BLOCKS.register("casino_carpet",
-            () -> new Block(BlockBehaviour.Properties.of()
-                    .strength(0.8F)
-                    .sound(SoundType.WOOL)));
+            () -> new CarpetBlock(BlockBehaviour.Properties.of()
+                    .strength(0.1F)
+                    .sound(SoundType.WOOL)
+                    .pushReaction(PushReaction.DESTROY)));
 
     /* ------------------------------------------------------------------ */
     /*  Casino walls                                                      */
@@ -116,9 +131,12 @@ public final class ModBlocks {
                     .sound(SoundType.WOOD)
                     .noOcclusion()));
 
-    /** A poker table with felt, cards and chip stacks. */
+    /**
+     * One large poker table: a 6 x 2 multiblock. Placing the item fills the
+     * whole footprint and breaking any part removes the table as a whole.
+     */
     public static final RegistryObject<Block> POKER_TABLE = BLOCKS.register("poker_table",
-            () -> new CasinoTableBlock(BlockBehaviour.Properties.of()
+            () -> new PokerTableBlock(BlockBehaviour.Properties.of()
                     .strength(1.5F)
                     .sound(SoundType.WOOD)
                     .noOcclusion()));

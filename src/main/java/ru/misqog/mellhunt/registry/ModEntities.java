@@ -4,6 +4,7 @@ import ru.misqog.mellhunt.MellstroyMod;
 import ru.misqog.mellhunt.entity.ChairSeatEntity;
 import ru.misqog.mellhunt.entity.FatCatEntity;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
+import ru.misqog.mellhunt.entity.PopudaiEntity;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -29,6 +30,13 @@ public final class ModEntities {
                     .sized(1.0F, 1.05F)
                     .clientTrackingRange(10)
                     .build(new ResourceLocation(MellstroyMod.MOD_ID, "fat_cat").toString()));
+
+    /** Meme parrot with a human face; a tameable pet. */
+    public static final RegistryObject<EntityType<PopudaiEntity>> POPUDAI = ENTITY_TYPES.register("popudai",
+            () -> EntityType.Builder.<PopudaiEntity>of(PopudaiEntity::new, MobCategory.CREATURE)
+                    .sized(0.55F, 0.7F)
+                    .clientTrackingRange(10)
+                    .build(new ResourceLocation(MellstroyMod.MOD_ID, "popudai").toString()));
 
     /** The invisible seat used by casino chairs. Never spawned by the player. */
     public static final RegistryObject<EntityType<ChairSeatEntity>> CHAIR_SEAT = ENTITY_TYPES.register("chair_seat",

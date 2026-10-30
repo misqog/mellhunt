@@ -12,8 +12,11 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
@@ -27,6 +30,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -44,6 +48,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
+import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -52,8 +57,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -64,7 +71,11 @@ public final class MellstroyHouseManager {
     private static final int CELL_SIZE = 2000;
     /** Size of mellstroy_house.nbt (14 x 11 x 12). */
     private static final int HOUSE_WIDTH = 14;
+    private static final int HOUSE_HEIGHT = 11;
     private static final int HOUSE_DEPTH = 12;
+    private static final int HOUSE_VOLUME = HOUSE_WIDTH * HOUSE_HEIGHT * HOUSE_DEPTH;
+    private static final int DAMAGE_SCAN_INTERVAL = 20;
+    private static final double DAMAGE_PLAYER_RANGE = 128.0D;
     /** Houses are never closer than this to each other. */
     private static final int MIN_HOUSE_SPACING = 1000;
     private static final int FIRST_MIN_DISTANCE = 50;
@@ -279,6 +290,8 @@ public final class MellstroyHouseManager {
         if (!placed) return false;
 
         data.houses.add(origin.immutable());
+        data.houseMasks.put(origin.immutable(), captureHouseMask(level, origin));
+        data.houseHazardMasks.put(origin.immutable(), captureHazardMask(level, origin));
         if (data.houses.size() == 1) {
             data.anchorX = origin.getX();
             data.anchorZ = origin.getZ();
@@ -380,23 +393,221 @@ public final class MellstroyHouseManager {
         if (house == null) return;
 
         if (!(event.getPlayer() instanceof ServerPlayer player)) return;
+        tryTriggerHouse(level, house, player);
+    }
 
-        // Creative is for building and testing: breaking the house must not
-        // summon Mellstroy. Survival, adventure and other modes are unchanged.
-        if (player.isCreative()) return;
-
-        // There is only one Mellstroy. Never summon him while he is already
-        // busy with someone: chasing, rushing, searching a hidden player, or
-        // sitting in the casino of the player he just caught. Otherwise the
-        // new rush would replace him mid-chase and he would "instantly switch"
-        // to whoever broke this block. Once he is free again (for example
-        // after the kill), the next break can call him normally.
+    /**
+     * Every path that damages a house (breaking, explosions, fire, lava,
+     * pistons, commands, ...) funnels into this method. It keeps the old rules:
+     * no summoning in creative or Peaceful, and never while Mellstroy is
+     * already busy with someone.
+     */
+    private static boolean tryTriggerHouse(ServerLevel level, BlockPos house, ServerPlayer player) {
+        if (level.getDifficulty() == Difficulty.PEACEFUL
+                || player.isCreative() || player.isSpectator()
+                || player.serverLevel() != level) {
+            return false;
+        }
+        HouseData data = data(level);
+        if (data.triggeredHouses.contains(key(house))) {
+            return false;
+        }
         if (isRushActive() || MellstroyEntity.isAnyOccupied(level.getServer())
-                || CasinoManager.hasActiveSession()) return;
+                || CasinoManager.hasActiveSession()) {
+            return false;
+        }
 
-        if (!startHouseRush(level, house, player)) return;
+        if (!startHouseRush(level, house, player)) {
+            return false;
+        }
         data.triggeredHouses.add(key(house));
         data.setDirty();
+        return true;
+    }
+
+    /**
+     * Explosions do not fire {@link BlockEvent.BreakEvent} for the player, so
+     * TNT, beds, respawn anchors and similar destruction are handled here.
+     * The explosion source resolves TNT and projectile owners to the player;
+     * if there is no owner the nearest non-creative player is blamed.
+     */
+    @SubscribeEvent
+    public static void onHouseExplosion(ExplosionEvent.Detonate event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || level != level.getServer().overworld()) return;
+        if (level.getDifficulty() == Difficulty.PEACEFUL) return;
+
+        HouseData data = data(level);
+        Set<BlockPos> damagedHouses = new HashSet<>();
+        for (BlockPos pos : event.getAffectedBlocks()) {
+            BlockPos house = containingHouse(data, pos);
+            if (house != null) {
+                damagedHouses.add(house);
+            }
+        }
+        if (damagedHouses.isEmpty()) {
+            return;
+        }
+
+        ServerPlayer player = explosionPlayer(event.getExplosion());
+        for (BlockPos house : damagedHouses) {
+            ServerPlayer culprit = player != null ? player : nearestPlayer(level, house, DAMAGE_PLAYER_RANGE);
+            if (culprit != null) {
+                tryTriggerHouse(level, house, culprit);
+            }
+        }
+    }
+
+    @Nullable
+    private static ServerPlayer explosionPlayer(Explosion explosion) {
+        if (explosion.getIndirectSourceEntity() instanceof ServerPlayer player) {
+            return player;
+        }
+        return null;
+    }
+
+    /**
+     * Fire has no block-break event at all. Every second the manager compares
+     * the saved non-air footprint of each nearby, not-yet-triggered house with
+     * the world. A missing block, fire, lava or water counts as destruction.
+     */
+    @SubscribeEvent
+    public static void onHouseIntegrityTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        MinecraftServer server = event.getServer();
+        if (server == null) return;
+        ServerLevel level = server.overworld();
+        if (level.getGameTime() % DAMAGE_SCAN_INTERVAL != 0) return;
+
+        HouseData data = data(level);
+        if (data.houses.isEmpty()) return;
+
+        for (BlockPos house : List.copyOf(data.houses)) {
+            if (data.triggeredHouses.contains(key(house))) continue;
+            if (!isHouseLoaded(level, house)) continue;
+
+            ServerPlayer player = nearestPlayer(level, house, DAMAGE_PLAYER_RANGE);
+            if (player == null) continue;
+
+            long[] mask = data.houseMasks.get(house);
+            long[] hazardMask = data.houseHazardMasks.get(house);
+            if (mask == null || hazardMask == null) {
+                // Houses saved before this feature are baselined on their first
+                // intact scan; new houses get a mask at placement time. Keep an
+                // already saved structural mask when only the hazard mask is
+                // missing (a save from the previous version).
+                if (mask == null) {
+                    data.houseMasks.put(house, captureHouseMask(level, house));
+                }
+                if (hazardMask == null) {
+                    data.houseHazardMasks.put(house, captureHazardMask(level, house));
+                }
+                data.setDirty();
+                continue;
+            }
+
+            if (houseDamaged(level, house, mask, hazardMask)) {
+                tryTriggerHouse(level, house, player);
+            }
+        }
+    }
+
+    @Nullable
+    private static ServerPlayer nearestPlayer(ServerLevel level, BlockPos house, double range) {
+        Vec3 center = Vec3.atCenterOf(house.offset(HOUSE_WIDTH / 2, HOUSE_HEIGHT / 2, HOUSE_DEPTH / 2));
+        double best = range * range;
+        ServerPlayer result = null;
+        for (ServerPlayer player : level.players()) {
+            if (player.isSpectator() || player.isCreative()) continue;
+            double distance = player.distanceToSqr(center);
+            if (distance < best) {
+                best = distance;
+                result = player;
+            }
+        }
+        return result;
+    }
+
+    private static boolean isHouseLoaded(ServerLevel level, BlockPos house) {
+        return level.isLoaded(house)
+                && level.isLoaded(house.offset(HOUSE_WIDTH - 1, HOUSE_HEIGHT - 1, HOUSE_DEPTH - 1));
+    }
+
+    private static long[] captureHouseMask(ServerLevel level, BlockPos house) {
+        long[] mask = new long[(HOUSE_VOLUME + 63) / 64];
+        for (int y = 0; y < HOUSE_HEIGHT; y++) {
+            for (int z = 0; z < HOUSE_DEPTH; z++) {
+                for (int x = 0; x < HOUSE_WIDTH; x++) {
+                    BlockPos pos = house.offset(x, y, z);
+                    BlockState state = level.getBlockState(pos);
+                    if (state.isAir() || state.canBeReplaced() || state.is(BlockTags.LEAVES)
+                            || state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE)
+                            || state.is(Blocks.SNOW)) {
+                        continue;
+                    }
+                    int index = x + z * HOUSE_WIDTH + y * HOUSE_WIDTH * HOUSE_DEPTH;
+                    mask[index >> 6] |= 1L << (index & 63);
+                }
+            }
+        }
+        return mask;
+    }
+
+    private static long[] captureHazardMask(ServerLevel level, BlockPos house) {
+        long[] mask = new long[(HOUSE_VOLUME + 63) / 64];
+        for (int y = 0; y < HOUSE_HEIGHT; y++) {
+            for (int z = 0; z < HOUSE_DEPTH; z++) {
+                for (int x = 0; x < HOUSE_WIDTH; x++) {
+                    if (isHazard(level.getBlockState(house.offset(x, y, z)))) {
+                        int index = x + z * HOUSE_WIDTH + y * HOUSE_WIDTH * HOUSE_DEPTH;
+                        mask[index >> 6] |= 1L << (index & 63);
+                    }
+                }
+            }
+        }
+        return mask;
+    }
+
+    private static boolean isHazard(BlockState state) {
+        return state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE)
+                || state.is(Blocks.WATER) || state.is(Blocks.LAVA);
+    }
+
+    private static boolean houseDamaged(ServerLevel level, BlockPos house, long[] mask, long[] hazardMask) {
+        for (int wordIndex = 0; wordIndex < mask.length; wordIndex++) {
+            long word = mask[wordIndex];
+            while (word != 0L) {
+                int bit = Long.numberOfTrailingZeros(word);
+                word &= word - 1L;
+                int index = (wordIndex << 6) + bit;
+                int x = index % HOUSE_WIDTH;
+                int z = (index / HOUSE_WIDTH) % HOUSE_DEPTH;
+                int y = index / (HOUSE_WIDTH * HOUSE_DEPTH);
+                BlockState state = level.getBlockState(house.offset(x, y, z));
+                if (state.isAir() || state.is(Blocks.FIRE) || state.is(Blocks.SOUL_FIRE)
+                        || state.is(Blocks.LAVA) || state.is(Blocks.WATER)) {
+                    return true;
+                }
+            }
+        }
+
+        // Water, lava and fire can flood/burn the house without removing a
+        // structural block first. Only hazards that were not present when the
+        // house was placed count as player damage (a decorative fireplace or
+        // well is ignored).
+        for (int y = 0; y < HOUSE_HEIGHT; y++) {
+            for (int z = 0; z < HOUSE_DEPTH; z++) {
+                for (int x = 0; x < HOUSE_WIDTH; x++) {
+                    int index = x + z * HOUSE_WIDTH + y * HOUSE_WIDTH * HOUSE_DEPTH;
+                    if ((hazardMask[index >> 6] & (1L << (index & 63))) != 0L) {
+                        continue;
+                    }
+                    if (isHazard(level.getBlockState(house.offset(x, y, z)))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     @SubscribeEvent
@@ -767,6 +978,8 @@ public final class MellstroyHouseManager {
         private int anchorZ;
         private final Set<String> cells = new HashSet<>();
         private final Set<BlockPos> houses = new HashSet<>();
+        private final Map<BlockPos, long[]> houseMasks = new HashMap<>();
+        private final Map<BlockPos, long[]> houseHazardMasks = new HashMap<>();
         private final Set<String> triggeredHouses = new HashSet<>();
         private final Set<String> readBooks = new HashSet<>();
         private final Set<String> seenHouses = new HashSet<>();
@@ -777,6 +990,15 @@ public final class MellstroyHouseManager {
             data.anchorZ = tag.getInt("AnchorZ");
             readStringSet(tag, "Cells", data.cells);
             for (long pos : tag.getLongArray("Houses")) data.houses.add(BlockPos.of(pos));
+            ListTag masks = tag.getList("Masks", Tag.TAG_COMPOUND);
+            for (int i = 0; i < masks.size(); i++) {
+                CompoundTag entry = masks.getCompound(i);
+                BlockPos pos = BlockPos.of(entry.getLong("Pos"));
+                data.houseMasks.put(pos, entry.getLongArray("Bits"));
+                if (entry.contains("Hazard", Tag.TAG_LONG_ARRAY)) {
+                    data.houseHazardMasks.put(pos, entry.getLongArray("Hazard"));
+                }
+            }
             readStringSet(tag, "Triggered", data.triggeredHouses);
             readStringSet(tag, "ReadBooks", data.readBooks);
             readStringSet(tag, "SeenHouses", data.seenHouses);
@@ -795,6 +1017,18 @@ public final class MellstroyHouseManager {
             tag.put("Cells", stringList(cells));
             long[] positions = houses.stream().mapToLong(BlockPos::asLong).toArray();
             tag.putLongArray("Houses", positions);
+            ListTag masks = new ListTag();
+            for (Map.Entry<BlockPos, long[]> entry : houseMasks.entrySet()) {
+                CompoundTag mask = new CompoundTag();
+                mask.putLong("Pos", entry.getKey().asLong());
+                mask.putLongArray("Bits", entry.getValue());
+                long[] hazard = houseHazardMasks.get(entry.getKey());
+                if (hazard != null) {
+                    mask.putLongArray("Hazard", hazard);
+                }
+                masks.add(mask);
+            }
+            tag.put("Masks", masks);
             tag.put("Triggered", stringList(triggeredHouses));
             tag.put("ReadBooks", stringList(readBooks));
             tag.put("SeenHouses", stringList(seenHouses));

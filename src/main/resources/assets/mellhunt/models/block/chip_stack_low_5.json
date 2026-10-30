@@ -1,0 +1,140 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "mellhunt:block/chip_red_side",
+    "red_top": "mellhunt:block/chip_red_top",
+    "red_side": "mellhunt:block/chip_red_side",
+    "black_top": "mellhunt:block/chip_black_top",
+    "black_side": "mellhunt:block/chip_black_side",
+    "gold_top": "mellhunt:block/chip_gold_top",
+    "gold_side": "mellhunt:block/chip_gold_side",
+    "white_top": "mellhunt:block/chip_white_top",
+    "white_side": "mellhunt:block/chip_white_side",
+    "green_top": "mellhunt:block/chip_green_top",
+    "green_side": "mellhunt:block/chip_green_side",
+    "blue_top": "mellhunt:block/chip_blue_top",
+    "blue_side": "mellhunt:block/chip_blue_side",
+    "purple_top": "mellhunt:block/chip_purple_top",
+    "purple_side": "mellhunt:block/chip_purple_side"
+  },
+  "elements": [
+    {
+      "from": [
+        3,
+        -4,
+        3
+      ],
+      "to": [
+        6,
+        -1,
+        6
+      ],
+      "faces": {
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#blue_top"
+        },
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#blue_side"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#blue_side"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#blue_side"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#blue_side"
+        }
+      }
+    },
+    {
+      "from": [
+        10,
+        -4,
+        8
+      ],
+      "to": [
+        13,
+        -2,
+        11
+      ],
+      "faces": {
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#purple_top"
+        },
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#purple_side"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#purple_side"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#purple_side"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#purple_side"
+        }
+      }
+    }
+  ]
+}

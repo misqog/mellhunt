@@ -1,6 +1,6 @@
 {
-  "parent": "minecraft:block/cube_all",
+  "parent": "minecraft:block/carpet",
   "textures": {
-    "all": "mellhunt:block/casino_carpet"
+    "wool": "mellhunt:block/casino_carpet"
   }
 }

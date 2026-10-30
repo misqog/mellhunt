@@ -1,6 +1,8 @@
 package ru.misqog.mellhunt.block;
 
+import ru.misqog.mellhunt.casino.LaptopSlotManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -26,9 +28,9 @@ import javax.annotation.Nullable;
 /**
  * An open MSI laptop standing on the ground.
  *
- * <p>Like the chekushka it can be turned in 16 steps of 22.5 degrees: every
- * right-click turns it a little, so it can be aimed at the viewer. The item
- * is {@link ru.misqog.mellhunt.item.LaptopItem}, which places this block on a
+ * <p>A normal right-click opens the laptop's slot machine; shift + right-click
+ * turns it in 16 steps of 22.5 degrees. The item is
+ * {@link ru.misqog.mellhunt.item.LaptopItem}, which places this block on a
  * regular right-click and is dropped again when the laptop is broken.</p>
  */
 public class LaptopBlock extends Block {
@@ -86,10 +88,15 @@ public class LaptopBlock extends Block {
     @Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player,
                                  InteractionHand hand, BlockHitResult hit) {
-        if (!level.isClientSide) {
-            // One click - one 22.5 degree step. Sixteen clicks bring it back.
-            level.setBlock(pos, state.cycle(ROTATION), Block.UPDATE_ALL);
-            level.playSound(null, pos, SoundEvents.WOODEN_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.35F, 1.7F);
+        if (player.isShiftKeyDown()) {
+            if (!level.isClientSide) {
+                // Shift + click: one 22.5 degree step. Sixteen clicks bring it back.
+                level.setBlock(pos, state.cycle(ROTATION), Block.UPDATE_ALL);
+                level.playSound(null, pos, SoundEvents.WOODEN_BUTTON_CLICK_ON,
+                        SoundSource.BLOCKS, 0.35F, 1.7F);
+            }
+        } else if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            LaptopSlotManager.open(serverPlayer, pos);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }

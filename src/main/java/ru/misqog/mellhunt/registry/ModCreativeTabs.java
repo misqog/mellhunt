@@ -28,6 +28,7 @@ public final class ModCreativeTabs {
                         // Floors
                         output.accept(ModItems.CASINO_TILE.get());
                         output.accept(ModItems.CASINO_FLOOR_GOLD.get());
+                        output.accept(ModItems.CASINO_FLOOR_GOLD_STAIRS.get());
                         output.accept(ModItems.CASINO_CARPET.get());
 
                         // Walls
@@ -45,6 +46,7 @@ public final class ModCreativeTabs {
                         output.accept(ModItems.MELLSTROY_SIGN.get());
 
                         output.accept(ModItems.FAT_CAT_SPAWN_EGG.get());
+                        output.accept(ModItems.POPUDAI_SPAWN_EGG.get());
                         output.accept(ModItems.MELLSTROY_SPAWN_EGG.get());
                     })
                     .build());

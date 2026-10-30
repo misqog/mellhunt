@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
@@ -25,7 +26,26 @@ import javax.annotation.Nullable;
  */
 public class ChairSeatEntity extends Entity {
 
-    private static final double SEAT_HEIGHT = 0.62D;
+    /** Top of the velvet cushion in the chair model (10/16 of a block). */
+    private static final double SEAT_HEIGHT = 10.0D / 16.0D;
+
+    /**
+     * Distance from the seated player's feet to the top of their thighs in the
+     * vanilla player model: the leg pivots sit at model height 12 px, and the
+     * player model is rendered at 15/16 scale.
+     */
+    private static final double SEATED_HIP_HEIGHT = 12.0D / 16.0D * 15.0D / 16.0D;
+
+    /** {@code Player#getMyRidingOffset()} - vanilla lowers the player by this much. */
+    private static final double PLAYER_RIDING_OFFSET = -0.35D;
+
+    /** Keep the player's body a hair above the cushion so the two never z-fight. */
+    private static final double SEAT_CLEARANCE = 0.01D;
+
+    /** Offset that puts the player's hips on the cushion instead of above it. */
+    private static final double CUSHION_RIDING_OFFSET =
+            -(SEATED_HIP_HEIGHT + PLAYER_RIDING_OFFSET) + SEAT_CLEARANCE;
+
     private static final int EMPTY_GRACE_TICKS = 5;
 
     @Nullable
@@ -47,6 +67,17 @@ public class ChairSeatEntity extends Entity {
     @Nullable
     public BlockPos getSeatPos() {
         return this.seatPos;
+    }
+
+    /**
+     * The default (0.1 * 0.75) lifts the player above the chair. Vanilla also
+     * applies {@link Player#getMyRidingOffset()} = -0.35 and renders the player
+     * in the riding pose, so the hips are 0.703 blocks above the entity's feet.
+     * Returning a negative offset lets the hips land on the cushion surface.
+     */
+    @Override
+    public double getPassengersRidingOffset() {
+        return CUSHION_RIDING_OFFSET;
     }
 
     @Override

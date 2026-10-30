@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "G  ",
+    "GG ",
+    "GGG"
+  ],
+  "key": {
+    "G": {
+      "item": "mellhunt:casino_floor_gold"
+    }
+  },
+  "result": {
+    "item": "mellhunt:casino_floor_gold_stairs",
+    "count": 4
+  }
+}

@@ -70,6 +70,56 @@ public final class ModNetwork {
                 .decoder(SlotMachineResultPacket::decode)
                 .consumerMainThread(SlotMachineResultPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(OpenRoulettePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenRoulettePacket::encode)
+                .decoder(OpenRoulettePacket::decode)
+                .consumerMainThread(OpenRoulettePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(RouletteSpinPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(RouletteSpinPacket::encode)
+                .decoder(RouletteSpinPacket::decode)
+                .consumerMainThread(RouletteSpinPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(RouletteResultPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(RouletteResultPacket::encode)
+                .decoder(RouletteResultPacket::decode)
+                .consumerMainThread(RouletteResultPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(OpenPokerPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenPokerPacket::encode)
+                .decoder(OpenPokerPacket::decode)
+                .consumerMainThread(OpenPokerPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(PokerDealPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(PokerDealPacket::encode)
+                .decoder(PokerDealPacket::decode)
+                .consumerMainThread(PokerDealPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(PokerDrawPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(PokerDrawPacket::encode)
+                .decoder(PokerDrawPacket::decode)
+                .consumerMainThread(PokerDrawPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(PokerStatePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(PokerStatePacket::encode)
+                .decoder(PokerStatePacket::decode)
+                .consumerMainThread(PokerStatePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(OpenLaptopSlotsPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenLaptopSlotsPacket::encode)
+                .decoder(OpenLaptopSlotsPacket::decode)
+                .consumerMainThread(OpenLaptopSlotsPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(LaptopSpinPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(LaptopSpinPacket::encode)
+                .decoder(LaptopSpinPacket::decode)
+                .consumerMainThread(LaptopSpinPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(LaptopResultPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(LaptopResultPacket::encode)
+                .decoder(LaptopResultPacket::decode)
+                .consumerMainThread(LaptopResultPacket::handle)
+                .add();
     }
 
     public static void sendOpenCasino(ServerPlayer player, int winChance) {
@@ -105,6 +155,53 @@ public final class ModNetwork {
                 : BuiltInRegistries.ITEM.getKey(prize.getItem());
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new SlotMachineResultPacket(won, line, prizeId, prize.getCount()));
+    }
+
+    public static void sendOpenRoulette(ServerPlayer player, BlockPos pos, int[] history) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new OpenRoulettePacket(pos, history));
+    }
+
+    public static void sendRouletteSpin(BlockPos pos, int kind, int number, boolean turbo) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(),
+                new RouletteSpinPacket(pos, kind, number, turbo));
+    }
+
+    public static void sendRouletteResult(ServerPlayer player, int winning, int kind, int number,
+                                          boolean won, int payout, int error, int[] history) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new RouletteResultPacket(winning, kind, number, won, payout, error, history));
+    }
+
+    public static void sendOpenPoker(ServerPlayer player, BlockPos pos) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenPokerPacket(pos));
+    }
+
+    public static void sendPokerDeal(BlockPos pos) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new PokerDealPacket(pos));
+    }
+
+    public static void sendPokerDraw(BlockPos pos, int heldMask) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new PokerDrawPacket(pos, heldMask));
+    }
+
+    public static void sendPokerState(ServerPlayer player, PokerStatePacket packet) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
+
+    public static void sendOpenLaptopSlots(ServerPlayer player, BlockPos pos) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenLaptopSlotsPacket(pos));
+    }
+
+    public static void sendLaptopSpin(BlockPos pos, int lines, boolean turbo) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(),
+                new LaptopSpinPacket(pos, lines, turbo));
+    }
+
+    public static void sendLaptopResult(ServerPlayer player, int[] grid, int payout,
+                                        int lineMask, int error) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new LaptopResultPacket(grid, payout, lineMask, error));
     }
 
     /**

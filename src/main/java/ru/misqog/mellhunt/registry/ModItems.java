@@ -22,6 +22,9 @@ public final class ModItems {
     public static final RegistryObject<Item> FAT_CAT_SPAWN_EGG = ITEMS.register("fat_cat_spawn_egg",
             () -> new FatCatSpawnEggItem(0xEFE4D2, 0x2B2521, new Item.Properties()));
 
+    public static final RegistryObject<Item> POPUDAI_SPAWN_EGG = ITEMS.register("popudai_spawn_egg",
+            () -> new PopudaiSpawnEggItem(0xF8CB3A, 0x2C74D6, new Item.Properties()));
+
     public static final RegistryObject<Item> CHEKUSHKA = ITEMS.register("chekushka",
             () -> new ChekushkaItem(new Item.Properties().stacksTo(16).rarity(Rarity.UNCOMMON)));
 
@@ -36,6 +39,8 @@ public final class ModItems {
             blockItem("casino_tile", ModBlocks.CASINO_TILE);
     public static final RegistryObject<Item> CASINO_FLOOR_GOLD =
             blockItem("casino_floor_gold", ModBlocks.CASINO_FLOOR_GOLD);
+    public static final RegistryObject<Item> CASINO_FLOOR_GOLD_STAIRS =
+            blockItem("casino_floor_gold_stairs", ModBlocks.CASINO_FLOOR_GOLD_STAIRS);
     public static final RegistryObject<Item> CASINO_CARPET =
             blockItem("casino_carpet", ModBlocks.CASINO_CARPET);
     public static final RegistryObject<Item> CASINO_WALL_WOOD =

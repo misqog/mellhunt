@@ -20,6 +20,39 @@ public final class ClientPacketHandler {
         Minecraft.getInstance().setScreen(new SlotMachineScreen(winChance, pos));
     }
 
+    public static void openRoulette(BlockPos pos, int[] history) {
+        Minecraft.getInstance().setScreen(new RouletteScreen(pos, history));
+    }
+
+    public static void showRouletteResult(int winning, int kind, int number,
+                                          boolean won, int payout, int error,
+                                          int[] history) {
+        if (Minecraft.getInstance().screen instanceof RouletteScreen screen) {
+            screen.receiveResult(winning, kind, number, won, payout, error, history);
+        }
+    }
+
+    public static void openPoker(BlockPos pos) {
+        Minecraft.getInstance().setScreen(new PokerScreen(pos));
+    }
+
+    public static void showPokerState(int phase, int[] cards, int held,
+                                      int payout, int category, int error) {
+        if (Minecraft.getInstance().screen instanceof PokerScreen screen) {
+            screen.receiveState(phase, cards, held, payout, category, error);
+        }
+    }
+
+    public static void openLaptopSlots(BlockPos pos) {
+        Minecraft.getInstance().setScreen(new LaptopSlotScreen(pos));
+    }
+
+    public static void showLaptopResult(int[] grid, int payout, int lineMask, int error) {
+        if (Minecraft.getInstance().screen instanceof LaptopSlotScreen screen) {
+            screen.receiveResult(grid, payout, lineMask, error);
+        }
+    }
+
     public static void showSlotResult(boolean won, int[] line, String prizeId, int prizeCount) {
         if (Minecraft.getInstance().screen instanceof SlotMachineScreen screen) {
             screen.receiveResult(won, line, prizeId, prizeCount);

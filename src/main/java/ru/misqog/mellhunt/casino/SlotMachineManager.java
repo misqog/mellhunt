@@ -121,10 +121,9 @@ public final class SlotMachineManager {
         ItemStack prize = ItemStack.EMPTY;
         if (won) {
             prize = rollPrize(random);
-            ItemStack reward = prize.copy();
-            if (!player.getInventory().add(reward)) {
-                player.drop(reward, false);
-            }
+            // Pay after the reels have stopped, not while they are still spinning.
+            PendingPayouts.schedule(player, prize.copy(),
+                    CasinoTiming.resultStartTicks(CasinoTiming.SPIN_TICKS) + 20);
         }
 
         level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.6F, 0.8F);
