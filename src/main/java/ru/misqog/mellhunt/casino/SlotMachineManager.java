@@ -55,8 +55,10 @@ public final class SlotMachineManager {
 
     private static List<Prize> prizes() {
         if (prizes == null) {
+            // Gold always pays at least one ingot plus leftover nuggets, so the
+            // smallest gold win is a decent hit instead of a single nugget.
             prizes = List.of(
-                    new Prize(Items.GOLD_NUGGET, 8, 16, 38),
+                    new Prize(Items.GOLD_NUGGET, 9, 17, 38),
                     new Prize(Items.GOLD_INGOT, 2, 4, 24),
                     new Prize(Items.DIAMOND, 1, 2, 16),
                     new Prize(Items.EMERALD, 2, 4, 10),
@@ -129,8 +131,16 @@ public final class SlotMachineManager {
         if (won) {
             prize = rollPrize(random);
             // Pay after the reels have stopped, not while they are still spinning.
-            PendingPayouts.schedule(player, prize.copy(),
-                    CasinoTiming.resultStartTicks(CasinoTiming.SPIN_TICKS) + 20);
+            int delay = CasinoTiming.resultStartTicks(CasinoTiming.SPIN_TICKS) + 20;
+            if (prize.is(Items.GOLD_NUGGET) || prize.is(Items.GOLD_INGOT)) {
+                // Gold is always paid as ingots and nuggets together, so a win
+                // is never just a single lonely nugget.
+                int nuggets = prize.is(Items.GOLD_NUGGET) ? prize.getCount() : prize.getCount() * 9;
+                payGold(player, nuggets, delay);
+                prize = goldPrizeStack(nuggets);
+            } else {
+                PendingPayouts.schedule(player, prize.copy(), delay);
+            }
         } else {
             // A loss settles the bet right away; a win settles with the payout.
             ActiveBets.resolve(player.getUUID());
@@ -138,6 +148,26 @@ public final class SlotMachineManager {
 
         level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.6F, 0.8F);
         ModNetwork.sendSlotResult(player, won, line, prize);
+    }
+
+    /** Splits a gold win into ingots and nuggets and queues both stacks. */
+    private static void payGold(ServerPlayer player, int nuggets, int delay) {
+        int ingots = nuggets / 9;
+        int rest = nuggets % 9;
+        if (ingots > 0) {
+            PendingPayouts.schedule(player, new ItemStack(Items.GOLD_INGOT, ingots), delay);
+        }
+        if (rest > 0) {
+            PendingPayouts.schedule(player, new ItemStack(Items.GOLD_NUGGET, rest), delay);
+        }
+    }
+
+    /** What the screen shows for a gold win: the ingots, or the nuggets if any. */
+    private static ItemStack goldPrizeStack(int nuggets) {
+        int ingots = nuggets / 9;
+        return ingots > 0
+                ? new ItemStack(Items.GOLD_INGOT, ingots)
+                : new ItemStack(Items.GOLD_NUGGET, nuggets);
     }
 
     private static ItemStack rollPrize(RandomSource random) {
@@ -155,7 +185,7 @@ public final class SlotMachineManager {
             roll -= prize.weight;
         }
 
-        return new ItemStack(Items.GOLD_NUGGET, 8);
+        return new ItemStack(Items.GOLD_NUGGET, 12);
     }
 
     private SlotMachineManager() {
