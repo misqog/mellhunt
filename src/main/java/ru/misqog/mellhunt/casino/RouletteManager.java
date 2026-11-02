@@ -179,12 +179,19 @@ public final class RouletteManager {
 
         state.viewers.add(player.getUUID());
         UUID id = player.getUUID();
-        if (!state.bets.containsKey(id) && !player.isCreative() && !CasinoMoney.takeGold(player)) {
-            ModNetwork.sendRouletteResult(player, -1, kind, number, false, 0, 1,
-                    history(level, pos));
-            player.displayClientMessage(
-                    Component.translatable("roulette.mellhunt.no_gold"), true);
-            return;
+        boolean firstBet = !state.bets.containsKey(id);
+        if (firstBet) {
+            // Register the wager before taking the gold, so an empty inventory
+            // during the spin is never mistaken for being broke.
+            ActiveBets.place(id);
+            if (!player.isCreative() && !CasinoMoney.takeGold(player)) {
+                ActiveBets.resolve(id);
+                ModNetwork.sendRouletteResult(player, -1, kind, number, false, 0, 1,
+                        history(level, pos));
+                player.displayClientMessage(
+                        Component.translatable("roulette.mellhunt.no_gold"), true);
+                return;
+            }
         }
 
         state.bets.put(id, new Bet(kind, number));
@@ -284,6 +291,7 @@ public final class RouletteManager {
                 PendingPayouts.schedule(player, new ItemStack(Items.GOLD_INGOT, payout),
                         SPIN_TICKS);
             }
+            ActiveBets.resolve(id);
             ModNetwork.sendRouletteResult(player, winning, bet.kind(), bet.number(),
                     won, payout, 0, history);
         }
@@ -388,5 +396,11 @@ public final class RouletteManager {
     }
 
     private RouletteManager() {
+    }
+
+    /** Forgets a player's wager when they leave the game entirely. */
+    @SubscribeEvent
+    public static void onLogout(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+        ActiveBets.clear(event.getEntity().getUUID());
     }
 }

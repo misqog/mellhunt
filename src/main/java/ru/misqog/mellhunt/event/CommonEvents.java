@@ -7,6 +7,7 @@ import ru.misqog.mellhunt.entity.MellstroyEntity;
 import ru.misqog.mellhunt.registry.ModEntities;
 import ru.misqog.mellhunt.registry.ModItems;
 import ru.misqog.mellhunt.spawn.MellstroyRespawnManager;
+import ru.misqog.mellhunt.world.MellstroyDimensions;
 import ru.misqog.mellhunt.world.MellstroyHouseManager;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
@@ -66,6 +67,12 @@ public final class CommonEvents {
         CommandSourceStack source = context.getSource();
         ServerPlayer player = source.getPlayerOrException();
         ServerLevel level = player.serverLevel();
+
+        // The casino's Mellstroy is decorative and must stay passive.
+        if (MellstroyDimensions.isCasino(level)) {
+            source.sendFailure(Component.translatable("message.mellhunt.no_space"));
+            return 0;
+        }
 
         float yaw = player.getYRot() * (float) (Math.PI / 180.0D);
         double x = player.getX() - Math.sin(yaw) * 4.0D;
@@ -190,6 +197,12 @@ public final class CommonEvents {
         ServerPlayer player = players.get(server.overworld().random.nextInt(players.size()));
         ServerLevel level = player.serverLevel();
 
+        // The hidden casino has exactly one decorative, passive Mellstroy.
+        // Natural spawning must never add a hostile copy there.
+        if (MellstroyDimensions.isCasino(level)) {
+            return;
+        }
+
         if (level.getDifficulty() == Difficulty.PEACEFUL) {
             return;
         }
@@ -230,7 +243,8 @@ public final class CommonEvents {
      * so the player always has room to run.
      */
     private static boolean trySpawnAway(ServerLevel level, ServerPlayer player, int min, int max) {
-        if (level.getDifficulty() == Difficulty.PEACEFUL) {
+        if (level.getDifficulty() == Difficulty.PEACEFUL
+                || MellstroyDimensions.isCasino(level)) {
             return false;
         }
         for (int attempt = 0; attempt < 48; attempt++) {
@@ -456,7 +470,8 @@ public final class CommonEvents {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
-        if (player.serverLevel().getDifficulty() == Difficulty.PEACEFUL) {
+        if (player.serverLevel().getDifficulty() == Difficulty.PEACEFUL
+                || MellstroyDimensions.isCasino(player.serverLevel())) {
             return;
         }
         player.displayClientMessage(

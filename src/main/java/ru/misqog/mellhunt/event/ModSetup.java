@@ -1,6 +1,7 @@
 package ru.misqog.mellhunt.event;
 
 import ru.misqog.mellhunt.MellstroyMod;
+import ru.misqog.mellhunt.entity.CashierEntity;
 import ru.misqog.mellhunt.entity.FatCatEntity;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
 import ru.misqog.mellhunt.entity.PopudaiEntity;
@@ -17,6 +18,7 @@ public final class ModSetup {
         event.put(ModEntities.MELLSTROY.get(), MellstroyEntity.createAttributes().build());
         event.put(ModEntities.FAT_CAT.get(), FatCatEntity.createAttributes().build());
         event.put(ModEntities.POPUDAI.get(), PopudaiEntity.createAttributes().build());
+        event.put(ModEntities.CASHIER.get(), CashierEntity.createAttributes().build());
     }
 
     private ModSetup() {

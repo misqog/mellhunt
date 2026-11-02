@@ -3,6 +3,7 @@ package ru.misqog.mellhunt.client;
 import ru.misqog.mellhunt.MellstroyMod;
 import ru.misqog.mellhunt.config.MellstroyConfig;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
+import ru.misqog.mellhunt.world.MellstroyDimensions;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.Difficulty;
@@ -46,6 +47,15 @@ public final class ClientFear {
             flash = 0.0F;
             seen = false;
             peaceful = false;
+            return;
+        }
+
+        // The casino is a safe place: no red vignette and no camera shake there.
+        if (MellstroyDimensions.isCasino(mc.level)) {
+            fear = 0.0F;
+            flash = 0.0F;
+            seen = false;
+            peaceful = mc.level.getDifficulty() == Difficulty.PEACEFUL;
             return;
         }
 
@@ -99,7 +109,8 @@ public final class ClientFear {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui
                 || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)
-                || (mc.level != null && mc.level.getDifficulty() == Difficulty.PEACEFUL)) {
+                || (mc.level != null && mc.level.getDifficulty() == Difficulty.PEACEFUL)
+                || MellstroyDimensions.isCasino(mc.level)) {
             return;
         }
 
@@ -151,7 +162,8 @@ public final class ClientFear {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null
                 || (mc.gameMode != null && mc.gameMode.getPlayerMode() == GameType.CREATIVE)
-                || (mc.level != null && mc.level.getDifficulty() == Difficulty.PEACEFUL)) {
+                || (mc.level != null && mc.level.getDifficulty() == Difficulty.PEACEFUL)
+                || MellstroyDimensions.isCasino(mc.level)) {
             return;
         }
 

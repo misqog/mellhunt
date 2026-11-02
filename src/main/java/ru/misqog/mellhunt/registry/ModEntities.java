@@ -1,6 +1,7 @@
 package ru.misqog.mellhunt.registry;
 
 import ru.misqog.mellhunt.MellstroyMod;
+import ru.misqog.mellhunt.entity.CashierEntity;
 import ru.misqog.mellhunt.entity.ChairSeatEntity;
 import ru.misqog.mellhunt.entity.FatCatEntity;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
@@ -45,6 +46,13 @@ public final class ModEntities {
                     .clientTrackingRange(4)
                     .updateInterval(20)
                     .build(new ResourceLocation(MellstroyMod.MOD_ID, "chair_seat").toString()));
+
+    /** The casino cashier: scenery with a gold exchange counter. */
+    public static final RegistryObject<EntityType<CashierEntity>> CASHIER = ENTITY_TYPES.register("cashier",
+            () -> EntityType.Builder.<CashierEntity>of(CashierEntity::new, MobCategory.MISC)
+                    .sized(0.6F, 1.95F)
+                    .clientTrackingRange(32)
+                    .build(new ResourceLocation(MellstroyMod.MOD_ID, "cashier").toString()));
 
     private ModEntities() {
     }

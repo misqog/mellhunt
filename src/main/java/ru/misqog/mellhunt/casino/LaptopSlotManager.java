@@ -38,11 +38,16 @@ public final class LaptopSlotManager {
         lines = Math.max(1, Math.min(LaptopSlots.LINES.length, lines));
 
         boolean free = player.isCreative();
-        if (!free && !CasinoMoney.takeGold(player, lines)) {
-            ModNetwork.sendLaptopResult(player, new int[LaptopSlots.CELLS], 0, 0, 1);
-            player.displayClientMessage(
-                    Component.translatable("laptop.slots.no_gold"), true);
-            return;
+        if (!free) {
+            // Register the wager first: the inventory is empty during the spin.
+            ActiveBets.place(player.getUUID());
+            if (!CasinoMoney.takeGold(player, lines)) {
+                ActiveBets.resolve(player.getUUID());
+                ModNetwork.sendLaptopResult(player, new int[LaptopSlots.CELLS], 0, 0, 1);
+                player.displayClientMessage(
+                        Component.translatable("laptop.slots.no_gold"), true);
+                return;
+            }
         }
 
         int[] grid = LaptopSlots.randomGrid(player.getRandom());
@@ -55,6 +60,11 @@ public final class LaptopSlotManager {
                     new ItemStack(Items.GOLD_INGOT, payout / 9), delay);
             PendingPayouts.schedule(player,
                     new ItemStack(Items.GOLD_NUGGET, payout % 9), delay);
+        }
+        // Every round ends here: a loss or a nugget-only win is settled now, an
+        // ingot win waits for its payout to land.
+        if (PendingPayouts.pendingGold(player.getUUID()) <= 0) {
+            ActiveBets.resolve(player.getUUID());
         }
 
         ServerLevel level = player.serverLevel();

@@ -2,6 +2,7 @@ package ru.misqog.mellhunt.spawn;
 
 import ru.misqog.mellhunt.MellstroyMod;
 import ru.misqog.mellhunt.entity.MellstroyEntity;
+import ru.misqog.mellhunt.world.MellstroyDimensions;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -57,7 +58,9 @@ public final class MellstroyRespawnManager {
             return false;
         }
 
-        List<ServerPlayer> players = server.getPlayerList().getPlayers();
+        List<ServerPlayer> players = server.getPlayerList().getPlayers().stream()
+                .filter(player -> !MellstroyDimensions.isCasino(player.serverLevel()))
+                .toList();
         if (players.isEmpty()) {
             nextAttemptAt = now + RETRY_TICKS;
             return false;

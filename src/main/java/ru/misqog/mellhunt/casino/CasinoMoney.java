@@ -7,25 +7,34 @@ import net.minecraft.world.item.Items;
 /** Shared gold handling for the playable casino furniture. */
 public final class CasinoMoney {
 
-    public static boolean hasGold(ServerPlayer player) {
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
+    /**
+     * All the player's gold, including the offhand slot, which is not part of
+     * {@link net.minecraft.world.entity.player.Inventory#getContainerSize()}.
+     */
+    private static int countIngots(ServerPlayer player) {
+        int count = 0;
+        var inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
             if (!stack.isEmpty() && stack.is(Items.GOLD_INGOT)) {
-                return true;
+                count += stack.getCount();
             }
         }
-        return false;
-    }
-
-    public static int countGold(ServerPlayer player) {
-        int count = 0;
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
+        for (int slot = 0; slot < inventory.offhand.size(); slot++) {
+            ItemStack stack = inventory.offhand.get(slot);
             if (!stack.isEmpty() && stack.is(Items.GOLD_INGOT)) {
                 count += stack.getCount();
             }
         }
         return count;
+    }
+
+    public static boolean hasGold(ServerPlayer player) {
+        return countIngots(player) > 0;
+    }
+
+    public static int countGold(ServerPlayer player) {
+        return countIngots(player);
     }
 
     /** Takes one gold ingot, or returns false when the inventory has none. */
@@ -42,8 +51,17 @@ public final class CasinoMoney {
             return false;
         }
         int left = count;
-        for (int slot = 0; slot < player.getInventory().getContainerSize() && left > 0; slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
+        var inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize() && left > 0; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty() && stack.is(Items.GOLD_INGOT)) {
+                int take = Math.min(left, stack.getCount());
+                stack.shrink(take);
+                left -= take;
+            }
+        }
+        for (int slot = 0; slot < inventory.offhand.size() && left > 0; slot++) {
+            ItemStack stack = inventory.offhand.get(slot);
             if (!stack.isEmpty() && stack.is(Items.GOLD_INGOT)) {
                 int take = Math.min(left, stack.getCount());
                 stack.shrink(take);

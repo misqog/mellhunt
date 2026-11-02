@@ -2,6 +2,7 @@ package ru.misqog.mellhunt.spawn;
 
 import ru.misqog.mellhunt.entity.MellstroyEntity;
 import ru.misqog.mellhunt.registry.ModEntities;
+import ru.misqog.mellhunt.world.MellstroyDimensions;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -21,6 +22,10 @@ public final class MellstroySpawner {
 
     public static boolean trySpawn(ServerLevel level, ServerPlayer anchor, int min, int max,
                                    boolean farFromAllPlayers, boolean announce, int graceTicks) {
+        // The casino's Mellstroy is decorative and permanently passive.
+        if (MellstroyDimensions.isCasino(level)) {
+            return false;
+        }
         // On Peaceful the world has no hostile mobs, and Mellstroy must not
         // quietly appear just to wander after the player.
         if (level.getDifficulty() == Difficulty.PEACEFUL) {

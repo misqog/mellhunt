@@ -37,6 +37,8 @@ public final class ModSounds {
     public static final RegistryObject<SoundEvent> SEKS = registerWorld("mellhunt.seks");
     /** The cat's "malishochek" sound: egg spawns and the first house-cat sighting. */
     public static final RegistryObject<SoundEvent> MALISHOCHEK = registerWorld("mellhunt.malishochek");
+    /** Plays once when the player is pulled into the hidden casino dimension. */
+    public static final RegistryObject<SoundEvent> POSHLA_VOZNYA = register("mellhunt.poshla_voznya");
 
     /** Random phrases he shouts while chasing you. */
     public static final List<RegistryObject<SoundEvent>> PHRASES = List.of(
@@ -59,6 +61,8 @@ public final class ModSounds {
     public static final float IZI_BRIGI_SECONDS = 9.324F;
     /** Length of posidim.ogg in seconds (the 1% second-chance jingle). */
     public static final float POSIDIM_SECONDS = 2.310F;
+    /** Length of poshla_voznya.ogg in seconds (the casino entry track). */
+    public static final float POSHLA_VOZNYA_SECONDS = 13.331F;
 
     private static RegistryObject<SoundEvent> register(String name) {
         return SOUNDS.register(name,

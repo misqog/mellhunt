@@ -63,6 +63,12 @@
       { "name": "mellhunt:mellstroy/malishochek", "attenuation_distance": 64 }
     ]
   },
+  "mellhunt.poshla_voznya": {
+    "subtitle": "subtitles.mellhunt.poshla_voznya",
+    "sounds": [
+      { "name": "mellhunt:mellstroy/poshla_voznya" }
+    ]
+  },
   "mellhunt.phrase1": {
     "subtitle": "subtitles.mellhunt.phrase",
     "sounds": [

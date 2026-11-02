@@ -50,6 +50,7 @@ public class PokerScreen extends Screen {
     private int ticks;
     private int revealAt = -1;
     private boolean resultSoundPlayed;
+    private boolean claimed;
 
     public PokerScreen(BlockPos pos) {
         super(Component.translatable("poker.mellhunt.title"));
@@ -68,6 +69,7 @@ public class PokerScreen extends Screen {
         this.error = error;
         this.waiting = false;
         this.resultSoundPlayed = false;
+        this.claimed = false;
 
         if (phase == PokerStatePacket.RESULT) {
             this.revealAt = this.ticks + 18;
@@ -83,11 +85,17 @@ public class PokerScreen extends Screen {
     @Override
     public void tick() {
         ++this.ticks;
-        if (this.phase == PokerStatePacket.RESULT && !this.resultSoundPlayed
-                && this.revealAt >= 0 && this.ticks >= this.revealAt) {
-            this.resultSoundPlayed = true;
-            Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(
-                    (this.payout > 0 ? ModSounds.WIN_CASINO : ModSounds.LOSE_CASINO).get(), 1.0F));
+        if (this.phase == PokerStatePacket.RESULT && this.revealAt >= 0 && this.ticks >= this.revealAt) {
+            if (!this.resultSoundPlayed) {
+                this.resultSoundPlayed = true;
+                Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(
+                        (this.payout > 0 ? ModSounds.WIN_CASINO : ModSounds.LOSE_CASINO).get(), 1.0F));
+            }
+            if (!this.claimed && this.payout > 0) {
+                // Cards are on screen: now the win may reach the inventory.
+                this.claimed = true;
+                ModNetwork.sendPokerClaim(this.pos, this.payout);
+            }
         }
     }
 

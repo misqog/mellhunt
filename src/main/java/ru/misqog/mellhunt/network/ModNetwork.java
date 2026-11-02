@@ -17,7 +17,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetwork {
 
-    private static final String PROTOCOL = "4";
+    private static final String PROTOCOL = "5";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MellstroyMod.MOD_ID, "main"),
@@ -125,6 +125,41 @@ public final class ModNetwork {
                 .decoder(LaptopResultPacket::decode)
                 .consumerMainThread(LaptopResultPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(CasinoEntryPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(CasinoEntryPacket::encode)
+                .decoder(CasinoEntryPacket::decode)
+                .consumerMainThread(CasinoEntryPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(OpenCashierPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(OpenCashierPacket::encode)
+                .decoder(OpenCashierPacket::decode)
+                .consumerMainThread(OpenCashierPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(CashierTradePacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(CashierTradePacket::encode)
+                .decoder(CashierTradePacket::decode)
+                .consumerMainThread(CashierTradePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(CashierOpenRequestPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(CashierOpenRequestPacket::encode)
+                .decoder(CashierOpenRequestPacket::decode)
+                .consumerMainThread(CashierOpenRequestPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(CashierHintPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(CashierHintPacket::encode)
+                .decoder(CashierHintPacket::decode)
+                .consumerMainThread(CashierHintPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(CasinoCountdownPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(CasinoCountdownPacket::encode)
+                .decoder(CasinoCountdownPacket::decode)
+                .consumerMainThread(CasinoCountdownPacket::handle)
+                .add();
+        CHANNEL.messageBuilder(PokerClaimPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(PokerClaimPacket::encode)
+                .decoder(PokerClaimPacket::decode)
+                .consumerMainThread(PokerClaimPacket::handle)
+                .add();
     }
 
     public static void sendOpenCasino(ServerPlayer player, int winChance) {
@@ -212,6 +247,55 @@ public final class ModNetwork {
                                         int lineMask, int error) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new LaptopResultPacket(grid, payout, lineMask, error));
+    }
+
+    /** Shows the centred casino title for the duration of the entry track. */
+    public static void sendCasinoEntry(ServerPlayer player, int durationTicks) {
+        if (player == null) {
+            return;
+        }
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new CasinoEntryPacket(durationTicks));
+    }
+
+    /** Opens the cashier counter on one client. */
+    public static void sendOpenCashier(ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenCashierPacket());
+    }
+
+    /** Tells the client whether the cashier may be talked to. */
+    public static void sendCashierHint(ServerPlayer player, boolean enabled) {
+        if (player == null) {
+            return;
+        }
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new CashierHintPacket(enabled));
+    }
+
+    /** Shows or hides the middle-screen countdown (0 hides it). */
+    public static void sendCasinoCountdown(ServerPlayer player, int seconds) {
+        if (player == null) {
+            return;
+        }
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new CasinoCountdownPacket(Math.max(0, seconds)));
+    }
+
+    /** Asks the server to open the cashier counter. */
+    public static void sendCashierOpenRequest() {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new CashierOpenRequestPacket());
+    }
+
+    /** Sends one pressed cashier button. */
+    public static void sendCashierTrade(int exchanges) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new CashierTradePacket(exchanges));
+    }
+
+    /** Tells the server the poker result is visible and the win may be paid. */
+    public static void sendPokerClaim(BlockPos pos, int payout) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), new PokerClaimPacket(pos, payout));
     }
 
     /**

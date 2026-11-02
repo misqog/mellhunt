@@ -108,6 +108,33 @@ public final class ClientPacketHandler {
         }
     }
 
+    /** Shows the centred casino title for the duration of the entry track. */
+    public static void showCasinoEntry(int durationTicks) {
+        CasinoEntryOverlay.show(durationTicks);
+    }
+
+    /** Opens the cashier counter. */
+    public static void openCashier() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!(minecraft.screen instanceof CashierScreen)) {
+            minecraft.setScreen(new CashierScreen());
+        }
+    }
+
+    /** Enables or disables the cashier's "talking" reach on this client. */
+    public static void setCashierEnabled(boolean enabled) {
+        // Kept for protocol compatibility; the counter is always reachable now.
+    }
+
+    /** Shows or hides the middle-screen "you lost everything" countdown. */
+    public static void showCasinoCountdown(int seconds) {
+        if (seconds <= 0) {
+            CasinoCountdownOverlay.hide();
+        } else {
+            CasinoCountdownOverlay.show(seconds);
+        }
+    }
+
     private ClientPacketHandler() {
     }
 }

@@ -82,7 +82,7 @@ public final class SlotMachineManager {
         if (player.distanceToSqr(Vec3.atCenterOf(pos)) > MAX_DISTANCE_SQR) {
             return;
         }
-        if (!player.isCreative() && !hasGold(player)) {
+        if (!player.isCreative() && !CasinoMoney.hasGold(player)) {
             player.displayClientMessage(
                     Component.translatable("slot.mellhunt.no_gold").withStyle(ChatFormatting.GOLD), true);
             return;
@@ -106,10 +106,17 @@ public final class SlotMachineManager {
             return;
         }
 
-        if (!player.isCreative() && !consumeGold(player)) {
-            player.displayClientMessage(
-                    Component.translatable("slot.mellhunt.no_gold").withStyle(ChatFormatting.GOLD), true);
-            return;
+        boolean free = player.isCreative();
+        if (!free) {
+            // The bet is registered first: the inventory is empty while the
+            // reels spin, and the death timer must not start before the result.
+            ActiveBets.place(player.getUUID());
+            if (!CasinoMoney.takeGold(player)) {
+                ActiveBets.resolve(player.getUUID());
+                player.displayClientMessage(
+                        Component.translatable("slot.mellhunt.no_gold").withStyle(ChatFormatting.GOLD), true);
+                return;
+            }
         }
 
         RandomSource random = player.getRandom();
@@ -124,6 +131,9 @@ public final class SlotMachineManager {
             // Pay after the reels have stopped, not while they are still spinning.
             PendingPayouts.schedule(player, prize.copy(),
                     CasinoTiming.resultStartTicks(CasinoTiming.SPIN_TICKS) + 20);
+        } else {
+            // A loss settles the bet right away; a win settles with the payout.
+            ActiveBets.resolve(player.getUUID());
         }
 
         level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.6F, 0.8F);
@@ -146,28 +156,6 @@ public final class SlotMachineManager {
         }
 
         return new ItemStack(Items.GOLD_NUGGET, 8);
-    }
-
-    private static boolean hasGold(ServerPlayer player) {
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-            if (!stack.isEmpty() && stack.is(Items.GOLD_INGOT)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean consumeGold(ServerPlayer player) {
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-            if (!stack.isEmpty() && stack.is(Items.GOLD_INGOT)) {
-                stack.shrink(1);
-                player.getInventory().setChanged();
-                return true;
-            }
-        }
-        return false;
     }
 
     private SlotMachineManager() {

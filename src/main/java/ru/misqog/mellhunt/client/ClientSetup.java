@@ -17,6 +17,7 @@ public final class ClientSetup {
         event.registerEntityRenderer(ModEntities.FAT_CAT.get(), FatCatRenderer::new);
         event.registerEntityRenderer(ModEntities.POPUDAI.get(), PopudaiRenderer::new);
         event.registerEntityRenderer(ModEntities.CHAIR_SEAT.get(), ChairSeatRenderer::new);
+        event.registerEntityRenderer(ModEntities.CASHIER.get(), CashierRenderer::new);
     }
 
     @SubscribeEvent
@@ -28,6 +29,8 @@ public final class ClientSetup {
     @SubscribeEvent
     public static void onRegisterOverlays(RegisterGuiOverlaysEvent event) {
         event.registerAboveAll("mellhunt_fear", ClientFear::renderOverlay);
+        event.registerAboveAll("mellhunt_casino_entry", CasinoEntryOverlay::renderOverlay);
+        event.registerAboveAll("mellhunt_casino_countdown", CasinoCountdownOverlay::renderOverlay);
     }
 
     private ClientSetup() {

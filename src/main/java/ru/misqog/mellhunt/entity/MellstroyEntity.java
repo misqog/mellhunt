@@ -4,6 +4,7 @@ import ru.misqog.mellhunt.advancement.ModAdvancements;
 import ru.misqog.mellhunt.config.MellstroyConfig;
 import ru.misqog.mellhunt.network.ModNetwork;
 import ru.misqog.mellhunt.registry.ModSounds;
+import ru.misqog.mellhunt.world.MellstroyDimensions;
 import ru.misqog.mellhunt.world.TemporaryGoldBlocks;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -1062,7 +1063,9 @@ public class MellstroyEntity extends Monster {
     }
 
     private boolean canAcquire(Player player) {
-        if (this.level().getDifficulty() == Difficulty.PEACEFUL) {
+        // The casino has its own, permanently passive Mellstroy.
+        if (MellstroyDimensions.isCasino(this.level())
+                || this.level().getDifficulty() == Difficulty.PEACEFUL) {
             return false;
         }
         if (this.hideCooldown > 0) {
@@ -1660,12 +1663,27 @@ public class MellstroyEntity extends Monster {
         return false;
     }
 
+    /** True when any Mellstroy on this level is busy with someone. */
+    public static boolean isAnyOccupied(ServerLevel level) {
+        for (MellstroyEntity mob : level.getEntitiesOfClass(MellstroyEntity.class, EVERYWHERE)) {
+            if (mob.isOccupied()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** True when any loaded Mellstroy in any dimension is busy with someone. */
     public static boolean isAnyOccupied(@Nullable MinecraftServer server) {
         if (server == null) {
             return false;
         }
         for (ServerLevel level : server.getAllLevels()) {
+            // The casino's seated copy is frozen and decorative; it must never
+            // block spawning or chases in the real world.
+            if (MellstroyDimensions.isCasino(level)) {
+                continue;
+            }
             for (MellstroyEntity mob : level.getEntitiesOfClass(MellstroyEntity.class, EVERYWHERE)) {
                 if (mob.isOccupied()) {
                     return true;
@@ -1866,6 +1884,15 @@ public class MellstroyEntity extends Monster {
         return false;
     }
 
+    /**
+     * He uses the player model, so the chair's player-tuned riding offset only
+     * puts his hips on the cushion when the same -0.35 offset is applied.
+     */
+    @Override
+    public double getMyRidingOffset() {
+        return -0.35D;
+    }
+
     /* ------------------------------------------------------------------ */
     /*  Spawning                                                          */
     /* ------------------------------------------------------------------ */
@@ -1879,6 +1906,15 @@ public class MellstroyEntity extends Monster {
      *         outdated copy.
      */
     public static boolean handleJoin(ServerLevel level, MellstroyEntity mob, boolean loadedFromDisk) {
+        // The casino has its own decorative, permanently passive copy. It must
+        // not participate in the "only one Mellstroy in the world" rule.
+        // Anything else that somehow enters the casino (a spawn egg, a command)
+        // is frozen too, so the dimension can never contain a hostile copy.
+        if (MellstroyDimensions.isCasino(level)) {
+            mob.setNoAi(true);
+            mob.setPersistenceRequired();
+            return false;
+        }
         if (loadedFromDisk) {
             if (activeId == null || activeId.equals(mob.getUUID())) {
                 activeId = mob.getUUID();
@@ -1900,6 +1936,9 @@ public class MellstroyEntity extends Monster {
             return;
         }
         for (ServerLevel other : server.getAllLevels()) {
+            if (MellstroyDimensions.isCasino(other)) {
+                continue;
+            }
             for (MellstroyEntity mob : other.getEntitiesOfClass(MellstroyEntity.class, EVERYWHERE)) {
                 if (!mob.getUUID().equals(keep)) {
                     mob.discard();
